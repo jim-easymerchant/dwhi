@@ -15,6 +15,8 @@ const baseCtx: SignalContext = {
   query: 'milk',
   matchedItem: null,
   matchedReceipt: null,
+  itemBehavior: null,
+  categoryBehavior: null,
   now: Date.now(),
 };
 

@@ -18,6 +18,11 @@
 
 import { searchByName } from '@/repositories/itemRepository';
 import { findMostRecentReceiptForItem } from '@/repositories/receiptRepository';
+import { recordAsk } from '@/repositories/askHistoryRepository';
+import {
+  getItemBehaviorStats,
+  getCategoryBehaviorStats,
+} from '@/services/behaviorStats';
 import type { ConfidenceResult, SignalContext, SignalGenerator } from './confidenceTypes';
 import { scoreSignals } from './weightedScorer';
 import { explain } from './confidenceExplainer';
@@ -25,12 +30,16 @@ import { receiptSignals } from './signalGenerators/receiptSignals';
 import { inventoryEventSignals } from './signalGenerators/inventoryEventSignals';
 import { barcodeSignals } from './signalGenerators/barcodeSignals';
 import { temporalDecaySignals } from './signalGenerators/temporalDecaySignals';
+import { askHistorySignals } from './signalGenerators/askHistorySignals';
+import { behaviorSignals } from './signalGenerators/behaviorSignals';
 
 const GENERATORS: SignalGenerator[] = [
   receiptSignals,
   inventoryEventSignals,
   barcodeSignals,
   temporalDecaySignals,
+  askHistorySignals,
+  behaviorSignals,
 ];
 
 /**
@@ -58,11 +67,36 @@ export async function answerQuestion(rawQuery: string): Promise<ConfidenceResult
   }
 
   const now = Date.now();
+
+  // Record the ask BEFORE building stats so the resulting summaryForTerm
+  // sees the current question. Behavior signals reason over the running
+  // count; a repeat-ask threshold of 3+ means the 3rd ask is the trigger.
+  await recordAsk(rawQuery, query).catch(err => {
+    // Logging-only — never block answering on a write hiccup.
+    console.warn('[confidence] recordAsk failed:', err);
+  });
+
   const [items, receiptHit] = await Promise.all([
     searchByName(query, 5),
     findMostRecentReceiptForItem(query),
   ]);
   const matchedItem = items[0] ?? null;
+
+  // Hydrate behavior stats once; signal generators read from context only.
+  const [itemBehavior, categoryBehavior] = await Promise.all([
+    matchedItem
+      ? getItemBehaviorStats(matchedItem.id, query, now).catch(err => {
+          console.warn('[confidence] getItemBehaviorStats failed:', err);
+          return null;
+        })
+      : Promise.resolve(null),
+    matchedItem?.category
+      ? getCategoryBehaviorStats(matchedItem.category).catch(err => {
+          console.warn('[confidence] getCategoryBehaviorStats failed:', err);
+          return null;
+        })
+      : Promise.resolve(null),
+  ]);
 
   const ctx: SignalContext = {
     query,
@@ -76,6 +110,8 @@ export async function answerQuestion(rawQuery: string): Promise<ConfidenceResult
           storeName: receiptHit.receipt.storeName,
         }
       : null,
+    itemBehavior,
+    categoryBehavior,
     now,
   };
 

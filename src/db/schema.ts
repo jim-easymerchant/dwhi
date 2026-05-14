@@ -49,4 +49,12 @@ export const SCHEMA_STATEMENTS: string[] = [
     FOREIGN KEY(receipt_id) REFERENCES receipts(id)
   );`,
   `CREATE INDEX IF NOT EXISTS idx_receipt_items_receipt_id ON receipt_items(receipt_id);`,
+  `CREATE TABLE IF NOT EXISTS ask_history (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    query_text TEXT NOT NULL,
+    normalized_term TEXT NOT NULL,
+    created_at TEXT NOT NULL
+  );`,
+  `CREATE INDEX IF NOT EXISTS idx_ask_history_normalized_term ON ask_history(normalized_term);`,
+  `CREATE INDEX IF NOT EXISTS idx_ask_history_created_at ON ask_history(created_at);`,
 ];

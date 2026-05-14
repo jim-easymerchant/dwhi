@@ -1,4 +1,5 @@
 import type { Item } from '@/types/models';
+import type { ItemBehaviorStats, CategoryBehaviorStats } from '@/services/behaviorStats';
 
 export type SignalPolarity = 'positive' | 'negative' | 'neutral';
 
@@ -58,6 +59,14 @@ export interface SignalContext {
     matchedName: string;
     storeName: string | null;
   } | null;
+  /**
+   * Per-item behavior (repurchase rhythm + burn time + ask history). Null
+   * when no item match exists or the engine couldn't pull stats — generators
+   * must tolerate this.
+   */
+  itemBehavior: ItemBehaviorStats | null;
+  /** Category-wide burn time, used as fallback when per-item data is thin. */
+  categoryBehavior: CategoryBehaviorStats | null;
   /** Wall clock at engine entry, ms since epoch. Pinned for determinism. */
   now: number;
 }

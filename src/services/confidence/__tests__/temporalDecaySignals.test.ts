@@ -34,6 +34,8 @@ function ctx(overrides: Partial<SignalContext>): SignalContext {
     query: 'thing',
     matchedItem: null,
     matchedReceipt: null,
+    itemBehavior: null,
+    categoryBehavior: null,
     now: FIXED_NOW,
     ...overrides,
   };

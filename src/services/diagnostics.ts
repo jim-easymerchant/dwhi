@@ -7,6 +7,8 @@ import {
   isOpenAIConfigured,
   type ConfigSource,
 } from './env';
+import { countAll as countAllAsks } from '@/repositories/askHistoryRepository';
+import { countLearnedPatterns } from './behaviorStats';
 
 export interface Diagnostics {
   aiEnabled: boolean;
@@ -19,6 +21,8 @@ export interface Diagnostics {
   itemCount: number;
   receiptCount: number;
   eventCount: number;
+  askHistoryCount: number;
+  learnedPatternsCount: number;
   seedPresent: boolean;
   appMode: 'Local POC';
 }
@@ -35,6 +39,8 @@ export async function readDiagnostics(): Promise<Diagnostics> {
   let itemCount = 0;
   let receiptCount = 0;
   let eventCount = 0;
+  let askHistoryCount = 0;
+  let learnedPatternsCount = 0;
 
   try {
     const db = await getDb();
@@ -50,6 +56,8 @@ export async function readDiagnostics(): Promise<Diagnostics> {
     itemCount = items?.c ?? 0;
     receiptCount = receipts?.c ?? 0;
     eventCount = events?.c ?? 0;
+    askHistoryCount = await countAllAsks();
+    learnedPatternsCount = await countLearnedPatterns();
     dbReady = true;
   } catch (e) {
     console.warn('[dwhi] diagnostics probe failed:', e);
@@ -66,6 +74,8 @@ export async function readDiagnostics(): Promise<Diagnostics> {
     itemCount,
     receiptCount,
     eventCount,
+    askHistoryCount,
+    learnedPatternsCount,
     seedPresent: itemCount > 0,
     appMode: 'Local POC',
   };
