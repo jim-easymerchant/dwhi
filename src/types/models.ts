@@ -52,10 +52,5 @@ export interface ReceiptItem {
   estimatedCategory: string | null;
 }
 
-export type ConfidenceLevel = 'Probably' | 'Maybe' | 'Unlikely' | 'No' | 'Unknown';
-
-export interface AskAnswer {
-  confidence: ConfidenceLevel;
-  message: string;
-  matchedItemId?: number;
-}
+// ConfidenceLevel + ConfidenceResult now live in
+// src/services/confidence/confidenceTypes.ts

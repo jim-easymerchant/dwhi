@@ -14,8 +14,7 @@ import { ScreenContainer } from '@/components/ScreenContainer';
 import { TextField } from '@/components/TextField';
 import { BigButton } from '@/components/BigButton';
 import { Card } from '@/components/Card';
-import { answerQuestion } from '@/services/confidenceEngine';
-import type { AskAnswer, ConfidenceLevel } from '@/types/models';
+import { answerQuestion, type ConfidenceResult, type ConfidenceLevel } from '@/services/confidence/confidenceEngine';
 import { colors, spacing, typography } from '@/theme/colors';
 
 const SUGGESTIONS = [
@@ -36,7 +35,8 @@ const CONFIDENCE_COLOR: Record<ConfidenceLevel, string> = {
 export default function AskScreen() {
   const router = useRouter();
   const [query, setQuery] = useState('');
-  const [answer, setAnswer] = useState<AskAnswer | null>(null);
+  const [answer, setAnswer] = useState<ConfidenceResult | null>(null);
+  const [showSignals, setShowSignals] = useState(false);
   const [busy, setBusy] = useState(false);
 
   const ask = async (q: string) => {
@@ -44,6 +44,7 @@ export default function AskScreen() {
     if (!trimmed) return;
     setBusy(true);
     setAnswer(null);
+    setShowSignals(false);
     try {
       const result = await answerQuestion(trimmed);
       setAnswer(result);
@@ -105,10 +106,35 @@ export default function AskScreen() {
 
           {answer ? (
             <Card style={styles.answerCard}>
-              <Text style={[styles.confidence, { color: CONFIDENCE_COLOR[answer.confidence] }]}>
-                {answer.confidence}
+              <Text style={[styles.confidence, { color: CONFIDENCE_COLOR[answer.level] }]}>
+                {answer.level}
               </Text>
-              <Text style={styles.answerText}>{answer.message}</Text>
+              <Text style={styles.answerText}>{answer.answer}</Text>
+              {__DEV__ && answer.signals.length > 0 ? (
+                <View style={styles.signalsWrap}>
+                  <Pressable onPress={() => setShowSignals(v => !v)} style={styles.signalsToggle}>
+                    <Text style={styles.signalsToggleText}>
+                      {showSignals ? 'Hide' : 'Show'} signals ({answer.signals.length}) · score {answer.score}
+                    </Text>
+                  </Pressable>
+                  {showSignals ? (
+                    <View style={styles.signalsList}>
+                      {answer.signals.map((s, idx) => (
+                        <View key={`${s.type}-${idx}`} style={styles.signalRow}>
+                          <Text style={styles.signalWeight}>
+                            {s.weight >= 0 ? '+' : ''}
+                            {s.weight.toFixed(1)}
+                          </Text>
+                          <View style={styles.signalText}>
+                            <Text style={styles.signalType}>{s.type}</Text>
+                            <Text style={styles.signalExplain}>{s.explanation}</Text>
+                          </View>
+                        </View>
+                      ))}
+                    </View>
+                  ) : null}
+                </View>
+              ) : null}
             </Card>
           ) : null}
         </ScrollView>
@@ -166,6 +192,45 @@ const styles = StyleSheet.create({
   answerText: {
     ...typography.body,
     color: colors.textPrimary,
+  },
+  signalsWrap: {
+    marginTop: spacing.sm,
+    gap: spacing.xs,
+  },
+  signalsToggle: {
+    alignSelf: 'flex-start',
+    paddingVertical: spacing.xs,
+  },
+  signalsToggleText: {
+    ...typography.caption,
+    color: colors.textMuted,
+  },
+  signalsList: {
+    gap: spacing.xs,
+    paddingTop: spacing.xs,
+  },
+  signalRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.sm,
+  },
+  signalWeight: {
+    ...typography.caption,
+    color: colors.textSecondary,
+    fontFamily: 'Courier',
+    minWidth: 48,
+  },
+  signalText: {
+    flex: 1,
+  },
+  signalType: {
+    ...typography.caption,
+    color: colors.textMuted,
+    fontFamily: 'Courier',
+  },
+  signalExplain: {
+    ...typography.caption,
+    color: colors.textSecondary,
   },
   close: {
     marginBottom: spacing.md,
