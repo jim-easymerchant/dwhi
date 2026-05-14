@@ -1,0 +1,83 @@
+name: Build Android APK (EAS, preview)
+
+# Manual trigger only. There is no push/PR trigger — EAS builds cost minutes
+# and we don't want to spend them on every commit.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-apk-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Preview APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Check out repo
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Set up Expo + EAS CLI
+        uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - name: Install dependencies
+        run: npm ci
+
+      # Write the OpenAI key to a .env file on the runner BEFORE the EAS
+      # upload happens. We use file redirection so the secret never appears
+      # in the step log; GitHub Actions would also mask it anyway, but
+      # redirection is the belt-and-braces version.
+      - name: Write build-time .env from repo secrets
+        env:
+          OPENAI_KEY: ${{ secrets.EXPO_PUBLIC_OPENAI_API_KEY }}
+          OPENAI_MODEL: ${{ secrets.EXPO_PUBLIC_OPENAI_MODEL }}
+        run: |
+          umask 077
+          {
+            if [ -n "${OPENAI_KEY}" ]; then
+              printf 'EXPO_PUBLIC_OPENAI_API_KEY=%s\n' "${OPENAI_KEY}"
+            fi
+            if [ -n "${OPENAI_MODEL}" ]; then
+              printf 'EXPO_PUBLIC_OPENAI_MODEL=%s\n' "${OPENAI_MODEL}"
+            fi
+          } > .env
+          # Log presence only — never the value.
+          if [ -s .env ]; then
+            echo "Wrote .env with $(wc -l < .env) variable(s)."
+          else
+            echo "No OpenAI secrets configured; building with mock parser."
+          fi
+
+      - name: Typecheck
+        run: npx tsc --noEmit
+
+      - name: Validate Expo config
+        run: npx expo config --type prebuild > /dev/null
+
+      - name: EAS Android APK build (preview profile)
+        run: |
+          eas build \
+            --platform android \
+            --profile preview \
+            --non-interactive
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+
+      - name: Reminder
+        if: always()
+        run: |
+          echo "::notice::APK link: see the most recent build at https://expo.dev/accounts/<your-account>/projects/dwhi/builds"
+          echo "::warning::This APK has the OpenAI key bundled into the JS. Do not distribute it. Rotate the key on https://platform.openai.com/api-keys when done."

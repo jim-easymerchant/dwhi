@@ -70,6 +70,79 @@ receipt manually — nothing saves until you tap **Save Receipt**.
   key. This is acceptable for a local-only POC; for production, swap to a
   thin server proxy that holds the key.
 
+## Building an Android APK (EAS Build, CI)
+
+A `workflow_dispatch`-only GitHub Actions workflow drives an EAS Build that
+produces a single installable Android APK for personal testing. There is no
+automatic trigger.
+
+### One-time setup
+
+1. Create an Expo account at https://expo.dev and a project for this repo:
+   ```bash
+   npx eas-cli@latest init
+   ```
+   This adds `expo.extra.eas.projectId` to `app.json` — commit that change
+   to the default branch.
+2. Generate a personal access token at
+   https://expo.dev/accounts/[username]/settings/access-tokens
+3. In **GitHub → Settings → Secrets and variables → Actions**, create:
+
+   | Secret | Required | Purpose |
+   | --- | --- | --- |
+   | `EXPO_TOKEN` | yes | Authenticates EAS CLI in the workflow |
+   | `EXPO_PUBLIC_OPENAI_API_KEY` | optional | OpenAI key the APK will use; leave blank for a mock-only APK |
+   | `EXPO_PUBLIC_OPENAI_MODEL` | optional | Override the default `gpt-4o-mini` |
+
+   None of these are echoed to the workflow log; GitHub Actions masks any
+   value matching a registered secret in step output.
+
+### Triggering a build
+
+1. Go to **Actions → Build Android APK (EAS, preview)**.
+2. Click **Run workflow** → pick a branch → **Run workflow**.
+3. The workflow runs, in order:
+   - `npm ci`
+   - writes `.env` from the secrets (file-redirection only; never logged)
+   - `npx tsc --noEmit`
+   - `npx expo config --type prebuild`
+   - `eas build --platform android --profile preview --non-interactive`
+4. After ~15-25 minutes, the workflow log prints the build URL like
+   `https://expo.dev/accounts/<your-account>/projects/dwhi/builds/<uuid>`.
+
+### APK link location
+
+- **Workflow log**: the EAS step prints `Build details: <expo.dev URL>` and
+  later `🚀 Android app: <signed APK URL>` once the build completes.
+- **Expo dashboard**: navigate to
+  `https://expo.dev/accounts/<your-account>/projects/dwhi/builds` — the
+  most recent entry has a **Download** button under the **Artifacts**
+  section.
+- The APK is signed with an EAS-managed keystore (the same one used for
+  every preview build, so app reinstalls don't clobber data between
+  builds).
+
+### ⚠️ Security & key rotation
+
+This workflow produces an APK with `EXPO_PUBLIC_OPENAI_API_KEY` bundled
+into the JavaScript. Anyone who has the APK file can extract the key.
+
+- **Do not distribute** the APK. Install it only on devices you control.
+- **Rotate the key when you're done** — revoke at
+  https://platform.openai.com/api-keys and update the GitHub secret
+  before triggering a new build.
+- For a real distribution build, move the OpenAI call behind a server
+  proxy and drop `EXPO_PUBLIC_OPENAI_API_KEY` from the bundle entirely.
+
+### How `.env` stays out of git
+
+- `.env` is gitignored (see `.gitignore` line 10) and never committed.
+- The workflow writes `.env` only on the runner via shell redirection;
+  the value never appears in step output.
+- A repo-local `.easignore` mirrors `.gitignore` but allows `.env` so
+  EAS Build can upload it. The file lives only on the ephemeral EAS
+  worker for the duration of the build and is discarded with the runner.
+
 ## Layout
 
 ```
