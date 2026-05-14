@@ -4,6 +4,7 @@ import { useRouter } from 'expo-router';
 import { ScreenContainer } from '@/components/ScreenContainer';
 import { CapturePicker } from '@/components/CapturePicker';
 import { BigButton } from '@/components/BigButton';
+import { Card } from '@/components/Card';
 import { persistImage } from '@/services/imageStorage';
 import { useCaptureStore } from '@/services/captureStore';
 import { isOpenAIConfigured } from '@/services/env';
@@ -15,10 +16,16 @@ import {
 } from '@/services/receiptParser';
 import { colors, spacing, typography } from '@/theme/colors';
 
+interface FailureState {
+  message: string;
+  storedUri: string;
+}
+
 export default function CaptureReceiptScreen() {
   const router = useRouter();
   const stageReceiptDraft = useCaptureStore(s => s.stageReceiptDraft);
   const [busy, setBusy] = useState(false);
+  const [failure, setFailure] = useState<FailureState | null>(null);
   const aliveRef = useRef(true);
 
   useEffect(() => {
@@ -40,40 +47,23 @@ export default function CaptureReceiptScreen() {
     router.replace('/confirm-receipt');
   };
 
-  const handleAiFailure = (storedUri: string, message: string) => {
-    if (!aliveRef.current) return;
-    // Soft failure: never block the user, always give a manual path forward.
-    Alert.alert(
-      "Couldn't read the receipt",
-      `${message}\n\nWhat would you like to do?`,
-      [
-        {
-          text: 'Enter manually',
-          onPress: () => {
-            const outcome = emptyReceiptOutcome();
-            outcome.parsed.purchasedAt = new Date().toISOString();
-            stageAndGo(storedUri, outcome);
-          },
-        },
-        {
-          text: 'Use sample data',
-          onPress: async () => {
-            try {
-              const outcome = await parseReceiptMock(storedUri);
-              stageAndGo(storedUri, outcome);
-            } catch (err) {
-              if (aliveRef.current) {
-                Alert.alert('Mock parser failed', String(err));
-              }
-            }
-          },
-        },
-        { text: 'Cancel', style: 'cancel' },
-      ],
-    );
+  const useSampleData = async (storedUri: string) => {
+    try {
+      const outcome = await parseReceiptMock(storedUri);
+      stageAndGo(storedUri, outcome);
+    } catch (e) {
+      if (aliveRef.current) {
+        Alert.alert('Mock parser failed', e instanceof Error ? e.message : String(e));
+      }
+    }
+  };
+
+  const enterManually = (storedUri: string) => {
+    stageAndGo(storedUri, emptyReceiptOutcome());
   };
 
   const handleCaptured = async (uri: string) => {
+    setFailure(null);
     setBusy(true);
     let stored = '';
     try {
@@ -95,7 +85,7 @@ export default function CaptureReceiptScreen() {
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);
       console.warn('[dwhi] parseReceiptImage failed:', message);
-      handleAiFailure(stored, message);
+      if (aliveRef.current) setFailure({ message, storedUri: stored });
     } finally {
       if (aliveRef.current) setBusy(false);
     }
@@ -120,7 +110,33 @@ export default function CaptureReceiptScreen() {
           busy={busy}
           busyLabel={aiOn ? 'Asking AI…' : 'Reading receipt…'}
         />
-        {!busy ? (
+
+        {failure ? (
+          <Card style={styles.failureCard}>
+            <Text style={styles.failureTitle}>Couldn't read the receipt</Text>
+            <Text style={styles.failureBody}>{failure.message}</Text>
+            <Text style={styles.failureHint}>
+              No worries — pick what works for you:
+            </Text>
+            <BigButton
+              label="Try another photo"
+              variant="primary"
+              onPress={() => setFailure(null)}
+            />
+            <BigButton
+              label="Enter manually"
+              variant="ghost"
+              onPress={() => enterManually(failure.storedUri)}
+            />
+            <BigButton
+              label="Use sample data"
+              variant="ghost"
+              onPress={() => useSampleData(failure.storedUri)}
+            />
+          </Card>
+        ) : null}
+
+        {!busy && !failure ? (
           <BigButton label="Cancel" variant="ghost" onPress={() => router.replace('/')} />
         ) : null}
       </ScrollView>
@@ -149,5 +165,23 @@ const styles = StyleSheet.create({
   modeText: {
     ...typography.caption,
     color: colors.textSecondary,
+  },
+  failureCard: {
+    borderColor: colors.warn,
+    backgroundColor: '#2A2418',
+    gap: spacing.sm,
+  },
+  failureTitle: {
+    ...typography.heading,
+    color: colors.warn,
+  },
+  failureBody: {
+    ...typography.caption,
+    color: colors.textSecondary,
+  },
+  failureHint: {
+    ...typography.label,
+    color: colors.textPrimary,
+    paddingTop: spacing.xs,
   },
 });

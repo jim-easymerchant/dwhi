@@ -34,9 +34,9 @@ const SOURCE_LABEL: Record<ParseSource, string> = {
 };
 
 const SOURCE_HINT: Record<ParseSource, string> = {
-  ai: "Edit anything that's off before saving. Nothing is saved until you tap Save Receipt.",
-  mock: 'Using sample data — edit freely before saving.',
-  manual: 'AI parsing failed, so this is starting blank. Add items below.',
+  ai: 'Review before saving — AI can misread receipts.',
+  mock: 'Sample data only — add your real items before saving.',
+  manual: 'AI parsing failed, so this is starting blank. Add your items below.',
 };
 
 const SOURCE_COLOR: Record<ParseSource, string> = {

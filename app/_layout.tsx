@@ -78,6 +78,7 @@ export default function RootLayout() {
           <Stack.Screen name="confirm-receipt" options={{ title: 'Confirm Receipt' }} />
           <Stack.Screen name="capture-item" options={{ title: 'Capture Item' }} />
           <Stack.Screen name="confirm-item" options={{ title: 'Confirm Item' }} />
+          <Stack.Screen name="settings" options={{ title: 'Settings' }} />
         </Stack>
       </SafeAreaProvider>
     </GestureHandlerRootView>

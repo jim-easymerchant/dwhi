@@ -71,7 +71,7 @@ export async function answerQuestion(rawQuery: string): Promise<AskAnswer> {
   if (matches.length === 0 && !receiptHit) {
     return {
       confidence: 'Unknown',
-      message: `I don't see any history for "${term}".`,
+      message: `I don't have any history for "${term}" yet. Scan a receipt or tap + In, and I'll remember next time.`,
     };
   }
 
@@ -139,7 +139,7 @@ export async function answerQuestion(rawQuery: string): Promise<AskAnswer> {
       break;
     case 'Unknown':
     default:
-      message = `I don't see any history for "${term}".`;
+      message = `I don't have any history for "${term}" yet. Scan a receipt or tap + In, and I'll remember next time.`;
       break;
   }
 
