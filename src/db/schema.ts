@@ -7,11 +7,15 @@ export const SCHEMA_STATEMENTS: string[] = [
     container_type TEXT,
     size TEXT,
     canonical_key TEXT,
+    barcode TEXT,
+    source TEXT,
+    raw_lookup_json TEXT,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
   );`,
   `CREATE INDEX IF NOT EXISTS idx_items_canonical_key ON items(canonical_key);`,
   `CREATE INDEX IF NOT EXISTS idx_items_name ON items(name);`,
+  `CREATE INDEX IF NOT EXISTS idx_items_barcode ON items(barcode);`,
   `CREATE TABLE IF NOT EXISTS inventory_events (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     item_id INTEGER NOT NULL,

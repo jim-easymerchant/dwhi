@@ -14,6 +14,7 @@ export interface Diagnostics {
   aiKeyLength: number;
   configSource: ConfigSource;
   probeSnapshot: Record<ConfigSource, boolean>;
+  barcodeLookup: 'Enabled (Open Food Facts, no key required)';
   dbReady: boolean;
   itemCount: number;
   receiptCount: number;
@@ -60,6 +61,7 @@ export async function readDiagnostics(): Promise<Diagnostics> {
     aiKeyLength: apiKey?.length ?? 0,
     configSource: getConfigSource(),
     probeSnapshot: getProbeSnapshot(),
+    barcodeLookup: 'Enabled (Open Food Facts, no key required)',
     dbReady,
     itemCount,
     receiptCount,

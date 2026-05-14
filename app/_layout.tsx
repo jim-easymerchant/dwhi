@@ -76,7 +76,9 @@ export default function RootLayout() {
           />
           <Stack.Screen name="capture-receipt" options={{ title: 'Receipt' }} />
           <Stack.Screen name="confirm-receipt" options={{ title: 'Confirm Receipt' }} />
-          <Stack.Screen name="capture-item" options={{ title: 'Capture Item' }} />
+          <Stack.Screen name="capture-item" options={{ title: 'Add or Remove' }} />
+          <Stack.Screen name="capture-item-barcode" options={{ title: 'Scan barcode' }} />
+          <Stack.Screen name="capture-item-photo" options={{ title: 'Photo' }} />
           <Stack.Screen name="confirm-item" options={{ title: 'Confirm Item' }} />
           <Stack.Screen name="settings" options={{ title: 'Settings' }} />
         </Stack>

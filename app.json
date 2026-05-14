@@ -30,6 +30,12 @@
     "plugins": [
       "expo-router",
       [
+        "expo-camera",
+        {
+          "cameraPermission": "Scan product barcodes and take photos of items."
+        }
+      ],
+      [
         "expo-image-picker",
         {
           "photosPermission": "Pick photos of items and receipts from your library.",

@@ -8,6 +8,7 @@ This repo is a local-first React Native (Expo) proof of concept. There is no aut
 
 - Expo SDK 51
 - React Native 0.74 + TypeScript
+- `expo-camera` (barcode scanning, item photos)
 - `expo-router` (file-based navigation)
 - `expo-sqlite` (local persistence)
 - `expo-image-picker` (camera + gallery)
@@ -69,6 +70,65 @@ receipt manually — nothing saves until you tap **Save Receipt**.
   into the JavaScript bundle, so anyone who installs the APK can extract the
   key. This is acceptable for a local-only POC; for production, swap to a
   thin server proxy that holds the key.
+
+## Barcode scanning (Open Food Facts)
+
+The **+ In** and **− Out** flows on the home screen now open a small
+method picker:
+
+```
+[ Scan barcode ]      (default — uses Open Food Facts)
+[ Take a photo ]      (the existing image-recognition path)
+[ Enter manually ]    (skip straight to confirm-item)
+```
+
+### How the lookup works
+
+1. The barcode scanner uses `expo-camera`'s built-in barcode reader
+   (EAN-13/8, UPC-A/E, Code 128, Code 39). The first valid scan is
+   debounced via a ref so a rapid-fire callback can't double-fire.
+2. The scanned code is sent to Open Food Facts v2:
+   ```
+   GET https://world.openfoodfacts.org/api/v2/product/{barcode}.json
+   ```
+   No API key, no auth, no backend in between.
+3. The response is mapped into the existing item-confirmation shape —
+   `product_name` → name, `brands` → manufacturer, `categories_tags`
+   (most specific) → category, `packaging` → containerType, `quantity`
+   → size — and the user lands on the confirm screen with a
+   **Barcode matched** badge and the hint *"Review before saving —
+   product databases can be incomplete."*
+4. The user reviews/edits everything and taps **Confirm**. Nothing is
+   saved until then.
+
+### Failure handling
+
+The user is never trapped on the scanner:
+
+- **Barcode not in Open Food Facts** (status 0 or 404) → routes to
+  confirm-item with a yellow note: *"Barcode 5000159484695 isn't in
+  Open Food Facts. Fill in the details below."* The barcode is
+  pre-filled so the next save still links the right physical SKU.
+- **Network / timeout / malformed response** → same fallback, with
+  the kind of failure noted, plus the **Take a photo instead** and
+  **Enter manually** buttons remain visible on the scanner.
+- **Camera permission denied** → permission-prompt screen with
+  **Take a photo instead** / **Enter manually** / Cancel.
+
+### Data the user should know about
+
+- **Community data**: Open Food Facts is community-edited. Coverage
+  and accuracy vary, especially outside packaged groceries. User
+  confirmation is mandatory — there is no auto-save anywhere in the
+  app.
+- **What gets sent**: only the scanned barcode value goes to
+  `world.openfoodfacts.org`. No photos, no location, no item history.
+- **What gets stored**: a trimmed copy of the response lives next to
+  the item row in `items.raw_lookup_json` so you can audit later.
+  The DB stays on the device.
+- **Barcode-first item matching**: when you scan the same product
+  again (IN or OUT), it links to the same item even if the name in
+  the DB drifted. Same product, same SKU.
 
 ## Building an Android APK (EAS Build, CI)
 

@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import type { ReceiptParseResult, ItemRecognitionResult } from './aiService';
 import type { ParseSource } from './receiptParser';
+import type { ItemLookupSource } from '@/types/models';
 
 /**
  * Lightweight in-memory handoff between the capture screens and the
@@ -29,6 +30,15 @@ export interface ItemDraft extends BaseDraft {
   imageUri: string | null;
   parsed: ItemRecognitionResult;
   direction: 'IN' | 'OUT';
+  source: ItemLookupSource;
+  barcode?: string;
+  rawLookupJson?: string;
+  /**
+   * Set when the user arrived at confirm via the barcode flow but the
+   * lookup didn't return a usable product — confirm-item shows this as a
+   * helpful hint so they know the barcode was at least captured.
+   */
+  lookupNote?: string;
 }
 
 interface CaptureStoreState {

@@ -13,6 +13,16 @@ export interface SaveItemEventInput {
   imageUri: string | null;
   rawAiJson: string | null;
   source: ItemSource;
+  /**
+   * Optional product barcode (EAN/UPC). If set, matching the existing item
+   * prefers this column over canonical_key — so the same physical product
+   * doesn't get duplicated when its printed name varies slightly.
+   */
+  barcode?: string | null;
+  /** Source label for the items row (e.g. "openfoodfacts"). */
+  itemSource?: string | null;
+  /** Raw external-lookup payload to keep alongside the item row. */
+  rawLookupJson?: string | null;
 }
 
 export interface SaveItemEventResult {
@@ -24,12 +34,17 @@ export interface SaveItemEventResult {
  * Upserts the item and records the inventory event in a single transaction.
  * Used by the IN/OUT confirm flow so a recordEvent failure can't orphan a
  * just-created item.
+ *
+ * Match priority for existing item:
+ *   1. items.barcode == input.barcode  (most reliable — same physical SKU)
+ *   2. items.canonical_key == lower(manufacturer + name)  (name fallback)
  */
 export async function saveItemEvent(
   input: SaveItemEventInput,
 ): Promise<SaveItemEventResult> {
   const trimmedName = input.name.trim() || 'Unnamed item';
   const canonicalKey = toCanonicalKey(trimmedName, input.manufacturer ?? undefined);
+  const trimmedBarcode = input.barcode?.trim() || null;
   const db = await getDb();
   const now = nowIso();
 
@@ -37,10 +52,20 @@ export async function saveItemEvent(
   let eventId = 0;
 
   await db.withTransactionAsync(async () => {
-    const existing = await db.getFirstAsync<{ id: number }>(
-      'SELECT id FROM items WHERE canonical_key = ? LIMIT 1;',
-      canonicalKey,
-    );
+    let existing: { id: number } | null = null;
+
+    if (trimmedBarcode) {
+      existing = await db.getFirstAsync<{ id: number }>(
+        'SELECT id FROM items WHERE barcode = ? LIMIT 1;',
+        trimmedBarcode,
+      );
+    }
+    if (!existing) {
+      existing = await db.getFirstAsync<{ id: number }>(
+        'SELECT id FROM items WHERE canonical_key = ? LIMIT 1;',
+        canonicalKey,
+      );
+    }
 
     if (existing) {
       itemId = existing.id;
@@ -50,26 +75,36 @@ export async function saveItemEvent(
                 category = COALESCE(?, category),
                 container_type = COALESCE(?, container_type),
                 size = COALESCE(?, size),
+                barcode = COALESCE(?, barcode),
+                source = COALESCE(?, source),
+                raw_lookup_json = COALESCE(?, raw_lookup_json),
                 updated_at = ?
           WHERE id = ?;`,
         input.manufacturer,
         input.category,
         input.containerType,
         input.size,
+        trimmedBarcode,
+        input.itemSource ?? null,
+        input.rawLookupJson ?? null,
         now,
         itemId,
       );
     } else {
       const insert = await db.runAsync(
         `INSERT INTO items
-           (manufacturer, name, category, container_type, size, canonical_key, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?);`,
+           (manufacturer, name, category, container_type, size, canonical_key,
+            barcode, source, raw_lookup_json, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
         input.manufacturer,
         trimmedName,
         input.category,
         input.containerType,
         input.size,
         canonicalKey,
+        trimmedBarcode,
+        input.itemSource ?? null,
+        input.rawLookupJson ?? null,
         now,
         now,
       );

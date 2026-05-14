@@ -1,6 +1,8 @@
 export type Direction = 'IN' | 'OUT';
 
-export type ItemSource = 'manual' | 'photo' | 'receipt';
+export type ItemSource = 'manual' | 'photo' | 'receipt' | 'barcode';
+
+export type ItemLookupSource = 'barcode' | 'ai' | 'mock' | 'manual';
 
 export interface Item {
   id: number;
@@ -10,6 +12,9 @@ export interface Item {
   containerType: string | null;
   size: string | null;
   canonicalKey: string | null;
+  barcode: string | null;
+  source: string | null;
+  rawLookupJson: string | null;
   createdAt: string;
   updatedAt: string;
 }

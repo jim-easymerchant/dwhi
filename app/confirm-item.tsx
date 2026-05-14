@@ -16,10 +16,39 @@ import { BigButton } from '@/components/BigButton';
 import { TextField } from '@/components/TextField';
 import { QuantitySelector } from '@/components/QuantitySelector';
 import { isDraftFresh, useCaptureStore } from '@/services/captureStore';
-import { findByCanonicalKey, toCanonicalKey } from '@/repositories/itemRepository';
+import { findByBarcode, findByCanonicalKey, toCanonicalKey } from '@/repositories/itemRepository';
 import { getEstimatedBalance } from '@/repositories/inventoryEventRepository';
 import { saveItemEvent } from '@/services/saveItemEvent';
 import { colors, spacing, typography } from '@/theme/colors';
+import type { ItemLookupSource, ItemSource } from '@/types/models';
+
+const SOURCE_LABEL: Record<ItemLookupSource, string> = {
+  barcode: 'Barcode matched',
+  ai: 'AI recognized',
+  mock: 'Mock recognized',
+  manual: 'Manual entry',
+};
+
+const SOURCE_HINT: Record<ItemLookupSource, string> = {
+  barcode: 'Review before saving — product databases can be incomplete.',
+  ai: 'Review before saving — AI can misread items.',
+  mock: 'Sample data only — edit before saving.',
+  manual: 'Add what you remember. Short answers are fine.',
+};
+
+const SOURCE_COLOR: Record<ItemLookupSource, string> = {
+  barcode: colors.accent,
+  ai: colors.accent,
+  mock: colors.textMuted,
+  manual: colors.warn,
+};
+
+const ITEM_EVENT_SOURCE: Record<ItemLookupSource, ItemSource> = {
+  barcode: 'barcode',
+  ai: 'photo',
+  mock: 'photo',
+  manual: 'manual',
+};
 
 export default function ConfirmItemScreen() {
   const router = useRouter();
@@ -32,6 +61,7 @@ export default function ConfirmItemScreen() {
   const [category, setCategory] = useState('');
   const [containerType, setContainerType] = useState('');
   const [size, setSize] = useState('');
+  const [barcode, setBarcode] = useState('');
   const [quantity, setQuantity] = useState(1);
   const [estimatedNet, setEstimatedNet] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
@@ -43,6 +73,7 @@ export default function ConfirmItemScreen() {
     setCategory(draft.parsed.category ?? '');
     setContainerType(draft.parsed.containerType ?? '');
     setSize(draft.parsed.size ?? '');
+    setBarcode(draft.barcode ?? '');
     setQuantity(1);
   }, [draft, fresh]);
 
@@ -54,12 +85,15 @@ export default function ConfirmItemScreen() {
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      if (!name.trim()) {
-        if (!cancelled) setEstimatedNet(null);
-        return;
-      }
       try {
-        const existing = await findByCanonicalKey(canonicalKey);
+        let existing = null;
+        const trimmedBarcode = barcode.trim();
+        if (trimmedBarcode) {
+          existing = await findByBarcode(trimmedBarcode);
+        }
+        if (!existing && name.trim()) {
+          existing = await findByCanonicalKey(canonicalKey);
+        }
         if (!existing) {
           if (!cancelled) setEstimatedNet(null);
           return;
@@ -67,7 +101,6 @@ export default function ConfirmItemScreen() {
         const balance = await getEstimatedBalance(existing.id);
         if (!cancelled) setEstimatedNet(balance.net);
       } catch (e) {
-        // Look-up failure isn't a save blocker — just hide the warning hint.
         console.warn('[dwhi] balance lookup failed:', e);
         if (!cancelled) setEstimatedNet(null);
       }
@@ -75,7 +108,7 @@ export default function ConfirmItemScreen() {
     return () => {
       cancelled = true;
     };
-  }, [canonicalKey, name]);
+  }, [barcode, canonicalKey, name]);
 
   if (!draft || !fresh) {
     return (
@@ -83,7 +116,7 @@ export default function ConfirmItemScreen() {
         <View style={styles.empty}>
           <Text style={styles.emptyTitle}>No item to confirm</Text>
           <Text style={styles.emptyBody}>
-            Head back and snap a photo. We'll pick up where you left off.
+            Head back and pick a method. We'll pick up where you left off.
           </Text>
           <BigButton
             label="Back to home"
@@ -99,6 +132,7 @@ export default function ConfirmItemScreen() {
   }
 
   const direction = draft.direction;
+  const source: ItemLookupSource = draft.source;
   const wouldGoNegative =
     direction === 'OUT' && estimatedNet !== null && estimatedNet - quantity < 0;
 
@@ -106,6 +140,7 @@ export default function ConfirmItemScreen() {
     if (saving) return;
     setSaving(true);
     try {
+      const trimmedBarcode = barcode.trim() || null;
       await saveItemEvent({
         manufacturer: manufacturer.trim() || null,
         name: name.trim() || 'Unnamed item',
@@ -116,7 +151,10 @@ export default function ConfirmItemScreen() {
         quantity,
         imageUri: draft.imageUri,
         rawAiJson: JSON.stringify(draft.parsed),
-        source: 'photo',
+        source: ITEM_EVENT_SOURCE[source],
+        barcode: trimmedBarcode,
+        itemSource: source === 'barcode' ? 'openfoodfacts' : source,
+        rawLookupJson: draft.rawLookupJson ?? null,
       });
       clearItemDraft();
       router.replace('/');
@@ -137,7 +175,6 @@ export default function ConfirmItemScreen() {
       return;
     }
     if (wouldGoNegative) {
-      // Soft warning. Saving is still allowed.
       Alert.alert(
         'Heads up',
         'This would put the estimated quantity below zero. Save anyway?',
@@ -169,7 +206,22 @@ export default function ConfirmItemScreen() {
           contentContainerStyle={styles.scroll}
           keyboardShouldPersistTaps="handled"
         >
-          <Text style={styles.directionLabel}>{directionLabel}</Text>
+          <View style={styles.headerRow}>
+            <Text style={styles.directionLabel}>{directionLabel}</Text>
+            <View style={[styles.badge, { borderColor: SOURCE_COLOR[source] }]}>
+              <View style={[styles.badgeDot, { backgroundColor: SOURCE_COLOR[source] }]} />
+              <Text style={[styles.badgeText, { color: SOURCE_COLOR[source] }]}>
+                {SOURCE_LABEL[source]}
+              </Text>
+            </View>
+          </View>
+          <Text style={styles.sourceHint}>{SOURCE_HINT[source]}</Text>
+
+          {draft.lookupNote ? (
+            <Card style={styles.noteCard}>
+              <Text style={styles.noteText}>{draft.lookupNote}</Text>
+            </Card>
+          ) : null}
 
           {draft.imageUri ? (
             <Card>
@@ -191,6 +243,14 @@ export default function ConfirmItemScreen() {
             placeholder="Jar, Box, Bag…"
           />
           <TextField label="Size" value={size} onChangeText={setSize} placeholder="12 oz" />
+          <TextField
+            label="Barcode"
+            value={barcode}
+            onChangeText={setBarcode}
+            placeholder="(none)"
+            keyboardType="number-pad"
+            helper="Matched against existing items so the same product doesn't duplicate."
+          />
 
           <Card>
             <Text style={styles.qtyLabel}>Quantity</Text>
@@ -243,11 +303,46 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
     textAlign: 'center',
   },
+  headerRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
   directionLabel: {
     ...typography.label,
     color: colors.textSecondary,
     textTransform: 'uppercase',
     letterSpacing: 1,
+  },
+  badge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    borderWidth: 1,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 4,
+    borderRadius: 999,
+  },
+  badgeDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  badgeText: {
+    ...typography.caption,
+    fontWeight: '600',
+  },
+  sourceHint: {
+    ...typography.caption,
+    color: colors.textMuted,
+  },
+  noteCard: {
+    borderColor: colors.warn,
+    backgroundColor: '#2A2418',
+  },
+  noteText: {
+    ...typography.caption,
+    color: colors.textSecondary,
   },
   preview: {
     width: '100%',

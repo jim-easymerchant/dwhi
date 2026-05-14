@@ -36,6 +36,13 @@ async function runInit(): Promise<void> {
   // "duplicate column" error.
   await tryAddColumn('receipts', 'raw_ai_json', 'TEXT');
   await tryAddColumn('receipts', 'parse_source', 'TEXT');
+  await tryAddColumn('items', 'barcode', 'TEXT');
+  await tryAddColumn('items', 'source', 'TEXT');
+  await tryAddColumn('items', 'raw_lookup_json', 'TEXT');
+  // Index is idempotent via IF NOT EXISTS — safe to re-run.
+  await db.execAsync(
+    'CREATE INDEX IF NOT EXISTS idx_items_barcode ON items(barcode);',
+  );
 }
 
 async function tryAddColumn(table: string, column: string, type: string): Promise<void> {

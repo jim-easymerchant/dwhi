@@ -47,6 +47,16 @@ export default function SettingsScreen() {
             </Card>
 
             <Card>
+              <Text style={styles.cardHeading}>Barcode lookup</Text>
+              <Row label="Open Food Facts" value="Enabled" tone="good" />
+              <Row label="API key" value="not required" tone="muted" />
+              <Text style={styles.privacyBody}>
+                Community-provided product data. May be incomplete or wrong; the
+                confirm screen always lets you fix it before saving.
+              </Text>
+            </Card>
+
+            <Card>
               <Text style={styles.cardHeading}>Config source</Text>
               <Row label="Resolved from" value={diag.configSource} tone={diag.configSource === 'none' ? 'warn' : 'good'} mono />
               <Row label="expoConfig.extra" value={diag.probeSnapshot.expoConfig ? 'present' : 'empty'} tone={diag.probeSnapshot.expoConfig ? 'good' : 'muted'} mono />
