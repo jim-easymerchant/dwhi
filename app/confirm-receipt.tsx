@@ -17,6 +17,7 @@ import { BigButton } from '@/components/BigButton';
 import { QuantitySelector } from '@/components/QuantitySelector';
 import { isDraftFresh, useCaptureStore } from '@/services/captureStore';
 import { saveReceiptWithEvents } from '@/services/saveReceipt';
+import type { ParseSource } from '@/services/receiptParser';
 import { colors, spacing, typography } from '@/theme/colors';
 
 interface DraftItem {
@@ -25,6 +26,24 @@ interface DraftItem {
   quantity: number;
   category: string | null;
 }
+
+const SOURCE_LABEL: Record<ParseSource, string> = {
+  ai: 'AI parsed',
+  mock: 'Mock parsed',
+  manual: 'Manual entry',
+};
+
+const SOURCE_HINT: Record<ParseSource, string> = {
+  ai: "Edit anything that's off before saving. Nothing is saved until you tap Save Receipt.",
+  mock: 'Using sample data — edit freely before saving.',
+  manual: 'AI parsing failed, so this is starting blank. Add items below.',
+};
+
+const SOURCE_COLOR: Record<ParseSource, string> = {
+  ai: colors.accent,
+  mock: colors.textMuted,
+  manual: colors.warn,
+};
 
 export default function ConfirmReceiptScreen() {
   const router = useRouter();
@@ -70,6 +89,8 @@ export default function ConfirmReceiptScreen() {
     );
   }
 
+  const source: ParseSource = draft.source;
+
   const updateItem = (index: number, patch: Partial<DraftItem>) => {
     setItems(prev => prev.map((it, i) => (i === index ? { ...it, ...patch } : it)));
   };
@@ -94,6 +115,8 @@ export default function ConfirmReceiptScreen() {
         purchasedAt: draft.parsed.purchasedAt,
         total: draft.parsed.total,
         imageUri: draft.imageUri,
+        rawAiJson: draft.rawAiJson ?? null,
+        parseSource: source,
         items,
       });
       clearReceiptDraft();
@@ -121,7 +144,22 @@ export default function ConfirmReceiptScreen() {
           contentContainerStyle={styles.scroll}
           keyboardShouldPersistTaps="handled"
         >
-          <TextField label="Store" value={storeName} onChangeText={setStoreName} />
+          <View style={styles.badgeRow}>
+            <View style={[styles.badge, { borderColor: SOURCE_COLOR[source] }]}>
+              <View style={[styles.badgeDot, { backgroundColor: SOURCE_COLOR[source] }]} />
+              <Text style={[styles.badgeText, { color: SOURCE_COLOR[source] }]}>
+                {SOURCE_LABEL[source]}
+              </Text>
+            </View>
+          </View>
+          <Text style={styles.sourceHint}>{SOURCE_HINT[source]}</Text>
+
+          <TextField
+            label="Store"
+            value={storeName}
+            onChangeText={setStoreName}
+            placeholder="Where did you shop?"
+          />
           <Text style={styles.purchasedAt}>
             Purchased: {new Date(draft.parsed.purchasedAt).toLocaleString()}
           </Text>
@@ -157,6 +195,16 @@ export default function ConfirmReceiptScreen() {
               </Pressable>
             </Card>
           ))}
+
+          {items.length === 0 ? (
+            <Card style={styles.emptyItemsCard}>
+              <Text style={styles.emptyItemsTitle}>No items yet</Text>
+              <Text style={styles.emptyItemsBody}>
+                Tap "+ Add item" to add what you bought. You can be vague — a short
+                name is plenty.
+              </Text>
+            </Card>
+          ) : null}
 
           <BigButton label="+ Add item" variant="ghost" onPress={addItem} />
         </ScrollView>
@@ -197,6 +245,31 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
     textAlign: 'center',
   },
+  badgeRow: {
+    flexDirection: 'row',
+  },
+  badge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    borderWidth: 1,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 4,
+    borderRadius: 999,
+  },
+  badgeDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  badgeText: {
+    ...typography.caption,
+    fontWeight: '600',
+  },
+  sourceHint: {
+    ...typography.caption,
+    color: colors.textMuted,
+  },
   purchasedAt: {
     ...typography.caption,
     color: colors.textMuted,
@@ -221,6 +294,21 @@ const styles = StyleSheet.create({
   removeText: {
     color: colors.danger,
     ...typography.label,
+  },
+  emptyItemsCard: {
+    alignItems: 'center',
+    gap: spacing.xs,
+    paddingVertical: spacing.lg,
+  },
+  emptyItemsTitle: {
+    ...typography.label,
+    color: colors.textPrimary,
+    fontWeight: '600',
+  },
+  emptyItemsBody: {
+    ...typography.caption,
+    color: colors.textMuted,
+    textAlign: 'center',
   },
   footer: {
     flexDirection: 'row',

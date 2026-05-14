@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import type { ReceiptParseResult, ItemRecognitionResult } from './aiService';
+import type { ParseSource } from './receiptParser';
 
 /**
  * Lightweight in-memory handoff between the capture screens and the
@@ -19,6 +20,9 @@ interface BaseDraft {
 export interface ReceiptDraft extends BaseDraft {
   imageUri: string | null;
   parsed: ReceiptParseResult;
+  source: ParseSource;
+  rawAiJson?: string;
+  model?: string;
 }
 
 export interface ItemDraft extends BaseDraft {

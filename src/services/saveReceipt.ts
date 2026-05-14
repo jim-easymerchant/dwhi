@@ -14,6 +14,8 @@ export interface SaveReceiptInput {
   purchasedAt: string | null;
   total: number | null;
   imageUri: string | null;
+  rawAiJson?: string | null;
+  parseSource?: 'ai' | 'mock' | 'manual';
   items: SaveReceiptDraftItem[];
 }
 
@@ -37,12 +39,14 @@ export async function saveReceiptWithEvents(input: SaveReceiptInput): Promise<Re
 
   await db.withTransactionAsync(async () => {
     const receiptInsert = await db.runAsync(
-      `INSERT INTO receipts (store_name, purchased_at, total, image_uri, created_at)
-       VALUES (?, ?, ?, ?, ?);`,
+      `INSERT INTO receipts (store_name, purchased_at, total, image_uri, raw_ai_json, parse_source, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?);`,
       input.storeName,
       input.purchasedAt,
       input.total,
       input.imageUri,
+      input.rawAiJson ?? null,
+      input.parseSource ?? null,
       now,
     );
     receiptId = receiptInsert.lastInsertRowId;

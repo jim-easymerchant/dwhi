@@ -31,6 +31,22 @@ async function runInit(): Promise<void> {
       await db.execAsync(stmt);
     }
   });
+  // Additive column upgrades for installs created against an older schema.
+  // SQLite has no "ADD COLUMN IF NOT EXISTS", so we attempt and swallow the
+  // "duplicate column" error.
+  await tryAddColumn('receipts', 'raw_ai_json', 'TEXT');
+  await tryAddColumn('receipts', 'parse_source', 'TEXT');
+}
+
+async function tryAddColumn(table: string, column: string, type: string): Promise<void> {
+  const db = await getDb();
+  try {
+    await db.execAsync(`ALTER TABLE ${table} ADD COLUMN ${column} ${type};`);
+  } catch (err) {
+    const message = err instanceof Error ? err.message.toLowerCase() : String(err);
+    if (message.includes('duplicate column')) return;
+    throw err;
+  }
 }
 
 /**

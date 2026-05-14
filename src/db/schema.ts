@@ -31,6 +31,8 @@ export const SCHEMA_STATEMENTS: string[] = [
     purchased_at TEXT,
     total REAL,
     image_uri TEXT,
+    raw_ai_json TEXT,
+    parse_source TEXT,
     created_at TEXT NOT NULL
   );`,
   `CREATE TABLE IF NOT EXISTS receipt_items (
