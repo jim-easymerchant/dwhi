@@ -1,0 +1,15 @@
+node_modules/
+.expo/
+dist/
+web-build/
+*.log
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+.DS_Store
+.env*
+!.env.example
+ios/
+android/
+expo-env.d.ts
+*.tsbuildinfo

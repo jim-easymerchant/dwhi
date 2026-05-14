@@ -1,0 +1,48 @@
+{
+  "expo": {
+    "name": "Do We Have It?",
+    "slug": "do-we-have-it",
+    "version": "0.1.0",
+    "scheme": "dwhi",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "newArchEnabled": false,
+    "android": {
+      "package": "com.dwhi.app",
+      "adaptiveIcon": {
+        "backgroundColor": "#0B0B0F"
+      },
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE"
+      ]
+    },
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.dwhi.app",
+      "infoPlist": {
+        "NSCameraUsageDescription": "Take photos of items and receipts to remember what you have.",
+        "NSPhotoLibraryUsageDescription": "Pick photos of items and receipts from your library."
+      }
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Take photos of items and receipts to remember what you have."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Pick photos of items and receipts from your library."
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}
