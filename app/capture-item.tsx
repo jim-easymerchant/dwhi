@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Alert, ScrollView } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { ScreenContainer } from '@/components/ScreenContainer';
 import { CapturePicker } from '@/components/CapturePicker';
+import { BigButton } from '@/components/BigButton';
 import { aiService } from '@/services/aiService';
 import { persistImage } from '@/services/imageStorage';
 import { useCaptureStore } from '@/services/captureStore';
@@ -13,20 +14,31 @@ export default function CaptureItemScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ direction?: string }>();
   const direction: Direction = params.direction === 'OUT' ? 'OUT' : 'IN';
-  const setItemDraft = useCaptureStore(s => s.setItemDraft);
+  const stageItemDraft = useCaptureStore(s => s.stageItemDraft);
   const [busy, setBusy] = useState(false);
+  const aliveRef = useRef(true);
+
+  useEffect(() => {
+    aliveRef.current = true;
+    return () => {
+      aliveRef.current = false;
+    };
+  }, []);
 
   const handleCaptured = async (uri: string) => {
     setBusy(true);
     try {
       const stored = await persistImage(uri, 'item');
       const parsed = await aiService.recognizeItem(stored);
-      setItemDraft({ imageUri: stored, parsed, direction });
+      if (!aliveRef.current) return;
+      stageItemDraft({ imageUri: stored, parsed, direction });
       router.replace('/confirm-item');
     } catch (e) {
-      Alert.alert('Could not read item', e instanceof Error ? e.message : String(e));
+      if (aliveRef.current) {
+        Alert.alert('Could not read item', e instanceof Error ? e.message : String(e));
+      }
     } finally {
-      setBusy(false);
+      if (aliveRef.current) setBusy(false);
     }
   };
 
@@ -38,7 +50,7 @@ export default function CaptureItemScreen() {
 
   return (
     <ScreenContainer>
-      <ScrollView contentContainerStyle={{ paddingVertical: spacing.lg }}>
+      <ScrollView contentContainerStyle={{ paddingVertical: spacing.lg, gap: spacing.md }}>
         <CapturePicker
           title={title}
           hint={hint}
@@ -46,6 +58,9 @@ export default function CaptureItemScreen() {
           busy={busy}
           busyLabel="Identifying item…"
         />
+        {!busy ? (
+          <BigButton label="Cancel" variant="ghost" onPress={() => router.replace('/')} />
+        ) : null}
       </ScrollView>
     </ScreenContainer>
   );

@@ -15,10 +15,8 @@ import { Card } from '@/components/Card';
 import { TextField } from '@/components/TextField';
 import { BigButton } from '@/components/BigButton';
 import { QuantitySelector } from '@/components/QuantitySelector';
-import { useCaptureStore } from '@/services/captureStore';
-import { createReceipt } from '@/repositories/receiptRepository';
-import { upsertItem, toCanonicalKey } from '@/repositories/itemRepository';
-import { recordEvent } from '@/repositories/inventoryEventRepository';
+import { isDraftFresh, useCaptureStore } from '@/services/captureStore';
+import { saveReceiptWithEvents } from '@/services/saveReceipt';
 import { colors, spacing, typography } from '@/theme/colors';
 
 interface DraftItem {
@@ -31,14 +29,15 @@ interface DraftItem {
 export default function ConfirmReceiptScreen() {
   const router = useRouter();
   const draft = useCaptureStore(s => s.receiptDraft);
-  const clearDraft = useCaptureStore(s => s.setReceiptDraft);
+  const clearReceiptDraft = useCaptureStore(s => s.clearReceiptDraft);
+  const fresh = isDraftFresh(draft);
 
   const [storeName, setStoreName] = useState('');
   const [items, setItems] = useState<DraftItem[]>([]);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    if (!draft?.parsed) return;
+    if (!draft || !fresh) return;
     setStoreName(draft.parsed.storeName ?? '');
     setItems(
       draft.parsed.items.map(i => ({
@@ -48,14 +47,24 @@ export default function ConfirmReceiptScreen() {
         category: i.category,
       })),
     );
-  }, [draft]);
+  }, [draft, fresh]);
 
-  if (!draft?.parsed) {
+  if (!draft || !fresh) {
     return (
       <ScreenContainer>
         <View style={styles.empty}>
-          <Text style={styles.emptyTitle}>No receipt loaded</Text>
-          <BigButton label="Go back" variant="ghost" onPress={() => router.back()} />
+          <Text style={styles.emptyTitle}>No receipt to confirm</Text>
+          <Text style={styles.emptyBody}>
+            Looks like you came in without scanning one. Head back and try again.
+          </Text>
+          <BigButton
+            label="Back to home"
+            variant="ghost"
+            onPress={() => {
+              clearReceiptDraft();
+              router.replace('/');
+            }}
+          />
         </View>
       </ScreenContainer>
     );
@@ -77,52 +86,29 @@ export default function ConfirmReceiptScreen() {
   };
 
   const save = async () => {
+    if (saving) return;
     setSaving(true);
     try {
-      const cleaned = items.filter(it => (it.canonicalName || it.rawName).trim().length > 0);
-      const receipt = await createReceipt({
+      await saveReceiptWithEvents({
         storeName: storeName.trim() || null,
-        purchasedAt: draft.parsed!.purchasedAt,
-        total: draft.parsed!.total,
+        purchasedAt: draft.parsed.purchasedAt,
+        total: draft.parsed.total,
         imageUri: draft.imageUri,
-        items: cleaned.map(it => ({
-          canonicalName: it.canonicalName || null,
-          rawName: it.rawName || null,
-          quantity: it.quantity,
-          estimatedCategory: it.category,
-        })),
+        items,
       });
-
-      // Also fold the parsed items into the item table + IN events so the
-      // confidence engine can answer "do we have X" right away.
-      for (const it of cleaned) {
-        const displayName = (it.canonicalName || it.rawName).trim();
-        const item = await upsertItem({
-          manufacturer: null,
-          name: displayName,
-          category: it.category,
-          containerType: null,
-          size: null,
-          canonicalKey: toCanonicalKey(displayName),
-        });
-        await recordEvent({
-          itemId: item.id,
-          direction: 'IN',
-          quantity: it.quantity,
-          imageUri: draft.imageUri,
-          rawAiJson: JSON.stringify(it),
-          source: 'receipt',
-        });
-      }
-
-      clearDraft(null);
-      Alert.alert('Saved', `Receipt #${receipt.id} stored.`);
+      clearReceiptDraft();
       router.replace('/');
     } catch (e) {
+      console.warn('[dwhi] saveReceipt failed:', e);
       Alert.alert('Could not save', e instanceof Error ? e.message : String(e));
     } finally {
       setSaving(false);
     }
+  };
+
+  const cancel = () => {
+    clearReceiptDraft();
+    router.replace('/');
   };
 
   return (
@@ -176,15 +162,7 @@ export default function ConfirmReceiptScreen() {
         </ScrollView>
 
         <View style={styles.footer}>
-          <BigButton
-            label="Cancel"
-            variant="ghost"
-            style={{ flex: 1 }}
-            onPress={() => {
-              clearDraft(null);
-              router.back();
-            }}
-          />
+          <BigButton label="Cancel" variant="ghost" style={{ flex: 1 }} onPress={cancel} />
           <BigButton
             label={saving ? 'Saving…' : 'Save Receipt'}
             variant="positive"
@@ -208,10 +186,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: spacing.lg,
+    padding: spacing.lg,
   },
   emptyTitle: {
     ...typography.heading,
     color: colors.textPrimary,
+  },
+  emptyBody: {
+    ...typography.caption,
+    color: colors.textMuted,
+    textAlign: 'center',
   },
   purchasedAt: {
     ...typography.caption,

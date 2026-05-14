@@ -15,18 +15,17 @@ import { Card } from '@/components/Card';
 import { BigButton } from '@/components/BigButton';
 import { TextField } from '@/components/TextField';
 import { QuantitySelector } from '@/components/QuantitySelector';
-import { useCaptureStore } from '@/services/captureStore';
-import { toCanonicalKey, upsertItem, findByCanonicalKey } from '@/repositories/itemRepository';
-import {
-  getEstimatedBalance,
-  recordEvent,
-} from '@/repositories/inventoryEventRepository';
+import { isDraftFresh, useCaptureStore } from '@/services/captureStore';
+import { findByCanonicalKey, toCanonicalKey } from '@/repositories/itemRepository';
+import { getEstimatedBalance } from '@/repositories/inventoryEventRepository';
+import { saveItemEvent } from '@/services/saveItemEvent';
 import { colors, spacing, typography } from '@/theme/colors';
 
 export default function ConfirmItemScreen() {
   const router = useRouter();
   const draft = useCaptureStore(s => s.itemDraft);
-  const clearDraft = useCaptureStore(s => s.setItemDraft);
+  const clearItemDraft = useCaptureStore(s => s.clearItemDraft);
+  const fresh = isDraftFresh(draft);
 
   const [manufacturer, setManufacturer] = useState('');
   const [name, setName] = useState('');
@@ -38,14 +37,14 @@ export default function ConfirmItemScreen() {
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    if (!draft?.parsed) return;
+    if (!draft || !fresh) return;
     setManufacturer(draft.parsed.manufacturer ?? '');
     setName(draft.parsed.name ?? '');
     setCategory(draft.parsed.category ?? '');
     setContainerType(draft.parsed.containerType ?? '');
     setSize(draft.parsed.size ?? '');
     setQuantity(1);
-  }, [draft]);
+  }, [draft, fresh]);
 
   const canonicalKey = useMemo(
     () => toCanonicalKey(name, manufacturer),
@@ -59,25 +58,41 @@ export default function ConfirmItemScreen() {
         if (!cancelled) setEstimatedNet(null);
         return;
       }
-      const existing = await findByCanonicalKey(canonicalKey);
-      if (!existing) {
+      try {
+        const existing = await findByCanonicalKey(canonicalKey);
+        if (!existing) {
+          if (!cancelled) setEstimatedNet(null);
+          return;
+        }
+        const balance = await getEstimatedBalance(existing.id);
+        if (!cancelled) setEstimatedNet(balance.net);
+      } catch (e) {
+        // Look-up failure isn't a save blocker — just hide the warning hint.
+        console.warn('[dwhi] balance lookup failed:', e);
         if (!cancelled) setEstimatedNet(null);
-        return;
       }
-      const balance = await getEstimatedBalance(existing.id);
-      if (!cancelled) setEstimatedNet(balance.net);
     })();
     return () => {
       cancelled = true;
     };
   }, [canonicalKey, name]);
 
-  if (!draft?.parsed) {
+  if (!draft || !fresh) {
     return (
       <ScreenContainer>
         <View style={styles.empty}>
           <Text style={styles.emptyTitle}>No item to confirm</Text>
-          <BigButton label="Go back" variant="ghost" onPress={() => router.back()} />
+          <Text style={styles.emptyBody}>
+            Head back and snap a photo. We'll pick up where you left off.
+          </Text>
+          <BigButton
+            label="Back to home"
+            variant="ghost"
+            onPress={() => {
+              clearItemDraft();
+              router.replace('/');
+            }}
+          />
         </View>
       </ScreenContainer>
     );
@@ -88,27 +103,25 @@ export default function ConfirmItemScreen() {
     direction === 'OUT' && estimatedNet !== null && estimatedNet - quantity < 0;
 
   const performSave = async () => {
+    if (saving) return;
     setSaving(true);
     try {
-      const item = await upsertItem({
+      await saveItemEvent({
         manufacturer: manufacturer.trim() || null,
         name: name.trim() || 'Unnamed item',
         category: category.trim() || null,
         containerType: containerType.trim() || null,
         size: size.trim() || null,
-        canonicalKey,
-      });
-      await recordEvent({
-        itemId: item.id,
         direction,
         quantity,
         imageUri: draft.imageUri,
         rawAiJson: JSON.stringify(draft.parsed),
         source: 'photo',
       });
-      clearDraft(null);
+      clearItemDraft();
       router.replace('/');
     } catch (e) {
+      console.warn('[dwhi] saveItemEvent failed:', e);
       Alert.alert('Could not save', e instanceof Error ? e.message : String(e));
     } finally {
       setSaving(false);
@@ -117,21 +130,30 @@ export default function ConfirmItemScreen() {
 
   const confirm = () => {
     if (!name.trim()) {
-      Alert.alert('Add a name', 'Give the item at least a short name so we can find it later.');
+      Alert.alert(
+        'Add a name',
+        'Give the item at least a short name so we can find it later.',
+      );
       return;
     }
     if (wouldGoNegative) {
+      // Soft warning. Saving is still allowed.
       Alert.alert(
         'Heads up',
         'This would put the estimated quantity below zero. Save anyway?',
         [
           { text: 'Cancel', style: 'cancel' },
-          { text: 'Save anyway', onPress: performSave },
+          { text: 'Save anyway', onPress: () => void performSave() },
         ],
       );
       return;
     }
     void performSave();
+  };
+
+  const cancel = () => {
+    clearItemDraft();
+    router.replace('/');
   };
 
   const directionLabel = direction === 'IN' ? 'Adding to home' : 'Removing from home';
@@ -151,7 +173,11 @@ export default function ConfirmItemScreen() {
 
           {draft.imageUri ? (
             <Card>
-              <Image source={{ uri: draft.imageUri }} style={styles.preview} resizeMode="cover" />
+              <Image
+                source={{ uri: draft.imageUri }}
+                style={styles.preview}
+                resizeMode="cover"
+              />
             </Card>
           ) : null}
 
@@ -182,15 +208,7 @@ export default function ConfirmItemScreen() {
         </ScrollView>
 
         <View style={styles.footer}>
-          <BigButton
-            label="Cancel"
-            variant="ghost"
-            style={{ flex: 1 }}
-            onPress={() => {
-              clearDraft(null);
-              router.back();
-            }}
-          />
+          <BigButton label="Cancel" variant="ghost" style={{ flex: 1 }} onPress={cancel} />
           <BigButton
             label={saving ? 'Saving…' : 'Confirm'}
             variant={buttonVariant}
@@ -214,10 +232,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: spacing.lg,
+    padding: spacing.lg,
   },
   emptyTitle: {
     ...typography.heading,
     color: colors.textPrimary,
+  },
+  emptyBody: {
+    ...typography.caption,
+    color: colors.textMuted,
+    textAlign: 'center',
   },
   directionLabel: {
     ...typography.label,

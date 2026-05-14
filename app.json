@@ -29,20 +29,15 @@
     "plugins": [
       "expo-router",
       [
-        "expo-camera",
-        {
-          "cameraPermission": "Take photos of items and receipts to remember what you have."
-        }
-      ],
-      [
         "expo-image-picker",
         {
-          "photosPermission": "Pick photos of items and receipts from your library."
+          "photosPermission": "Pick photos of items and receipts from your library.",
+          "cameraPermission": "Take photos of items and receipts to remember what you have."
         }
       ]
     ],
     "experiments": {
-      "typedRoutes": true
+      "typedRoutes": false
     }
   }
 }

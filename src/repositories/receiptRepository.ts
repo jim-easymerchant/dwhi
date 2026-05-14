@@ -57,28 +57,31 @@ export interface CreateReceiptInput {
 export async function createReceipt(input: CreateReceiptInput): Promise<Receipt> {
   const db = await getDb();
   const now = nowIso();
-  const result = await db.runAsync(
-    `INSERT INTO receipts (store_name, purchased_at, total, image_uri, created_at)
-     VALUES (?, ?, ?, ?, ?);`,
-    input.storeName,
-    input.purchasedAt,
-    input.total,
-    input.imageUri,
-    now,
-  );
-  const receiptId = result.lastInsertRowId;
-  for (const it of input.items) {
-    await db.runAsync(
-      `INSERT INTO receipt_items
-         (receipt_id, canonical_name, raw_name, quantity, estimated_category)
+  let receiptId = 0;
+  await db.withTransactionAsync(async () => {
+    const result = await db.runAsync(
+      `INSERT INTO receipts (store_name, purchased_at, total, image_uri, created_at)
        VALUES (?, ?, ?, ?, ?);`,
-      receiptId,
-      it.canonicalName,
-      it.rawName,
-      it.quantity,
-      it.estimatedCategory,
+      input.storeName,
+      input.purchasedAt,
+      input.total,
+      input.imageUri,
+      now,
     );
-  }
+    receiptId = result.lastInsertRowId;
+    for (const it of input.items) {
+      await db.runAsync(
+        `INSERT INTO receipt_items
+           (receipt_id, canonical_name, raw_name, quantity, estimated_category)
+         VALUES (?, ?, ?, ?, ?);`,
+        receiptId,
+        it.canonicalName,
+        it.rawName,
+        it.quantity,
+        it.estimatedCategory,
+      );
+    }
+  });
   return {
     id: receiptId,
     storeName: input.storeName,

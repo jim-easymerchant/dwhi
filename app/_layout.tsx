@@ -1,6 +1,6 @@
 import 'react-native-gesture-handler';
-import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
+import React, { useCallback, useEffect, useState } from 'react';
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -12,24 +12,38 @@ import { colors } from '@/theme/colors';
 export default function RootLayout() {
   const [ready, setReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [attempt, setAttempt] = useState(0);
+
+  const bootstrap = useCallback(async () => {
+    try {
+      await initDatabase();
+      await seedIfEmpty();
+      setReady(true);
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e);
+      console.warn('[dwhi] bootstrap failed:', message);
+      setError(message);
+    }
+  }, []);
 
   useEffect(() => {
-    (async () => {
-      try {
-        await initDatabase();
-        await seedIfEmpty();
-        setReady(true);
-      } catch (e) {
-        setError(e instanceof Error ? e.message : String(e));
-      }
-    })();
-  }, []);
+    setError(null);
+    setReady(false);
+    void bootstrap();
+  }, [attempt, bootstrap]);
 
   if (error) {
     return (
       <View style={styles.center}>
-        <Text style={styles.errorTitle}>Database setup failed</Text>
+        <Text style={styles.errorTitle}>Could not get started</Text>
         <Text style={styles.errorBody}>{error}</Text>
+        <Pressable
+          accessibilityRole="button"
+          onPress={() => setAttempt(a => a + 1)}
+          style={({ pressed }) => [styles.retry, pressed && { opacity: 0.7 }]}
+        >
+          <Text style={styles.retryLabel}>Try again</Text>
+        </Pressable>
       </View>
     );
   }
@@ -88,5 +102,18 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     fontSize: 14,
     textAlign: 'center',
+    marginBottom: 24,
+  },
+  retry: {
+    backgroundColor: colors.surfaceElevated,
+    borderColor: colors.border,
+    borderWidth: 1,
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 12,
+  },
+  retryLabel: {
+    color: colors.textPrimary,
+    fontWeight: '600',
   },
 });
