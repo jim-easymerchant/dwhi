@@ -36,29 +36,46 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      # Write the OpenAI key to a .env file on the runner BEFORE the EAS
-      # upload happens. We use file redirection so the secret never appears
-      # in the step log; GitHub Actions would also mask it anyway, but
-      # redirection is the belt-and-braces version.
-      - name: Write build-time .env from repo secrets
+      # Push the secrets into the EAS-managed environment for the `preview`
+      # build profile. This is the official EAS path for injecting build-time
+      # secrets — EAS populates the build worker's process.env with these
+      # values before Metro bundles. They are stored encrypted (--visibility
+      # secret) and overwritten each run with --force.
+      #
+      # SAFE diagnostics only: key length and presence — never the value,
+      # never the last-N characters.
+      - name: Push OpenAI key + model to EAS preview env
         env:
           OPENAI_KEY: ${{ secrets.EXPO_PUBLIC_OPENAI_API_KEY }}
           OPENAI_MODEL: ${{ secrets.EXPO_PUBLIC_OPENAI_MODEL }}
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
         run: |
-          umask 077
-          {
-            if [ -n "${OPENAI_KEY}" ]; then
-              printf 'EXPO_PUBLIC_OPENAI_API_KEY=%s\n' "${OPENAI_KEY}"
-            fi
-            if [ -n "${OPENAI_MODEL}" ]; then
-              printf 'EXPO_PUBLIC_OPENAI_MODEL=%s\n' "${OPENAI_MODEL}"
-            fi
-          } > .env
-          # Log presence only — never the value.
-          if [ -s .env ]; then
-            echo "Wrote .env with $(wc -l < .env) variable(s)."
+          set -e
+          if [ -n "${OPENAI_KEY}" ]; then
+            echo "OpenAI key present: yes (length: ${#OPENAI_KEY})"
+            eas env:create \
+              --scope project \
+              --environment preview \
+              --name EXPO_PUBLIC_OPENAI_API_KEY \
+              --value "${OPENAI_KEY}" \
+              --visibility secret \
+              --non-interactive \
+              --force
           else
-            echo "No OpenAI secrets configured; building with mock parser."
+            echo "::warning::EXPO_PUBLIC_OPENAI_API_KEY secret is empty or unset. APK will use the mock parser."
+          fi
+          if [ -n "${OPENAI_MODEL}" ]; then
+            echo "OpenAI model override: ${OPENAI_MODEL}"
+            eas env:create \
+              --scope project \
+              --environment preview \
+              --name EXPO_PUBLIC_OPENAI_MODEL \
+              --value "${OPENAI_MODEL}" \
+              --visibility plaintext \
+              --non-interactive \
+              --force
+          else
+            echo "OpenAI model: using default (gpt-4o-mini)"
           fi
 
       - name: Typecheck
@@ -68,16 +85,16 @@ jobs:
         run: npx expo config --type prebuild > /dev/null
 
       - name: EAS Android APK build (preview profile)
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
         run: |
           eas build \
             --platform android \
             --profile preview \
             --non-interactive
-        env:
-          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
 
       - name: Reminder
         if: always()
         run: |
-          echo "::notice::APK link: see the most recent build at https://expo.dev/accounts/<your-account>/projects/dwhi/builds"
-          echo "::warning::This APK has the OpenAI key bundled into the JS. Do not distribute it. Rotate the key on https://platform.openai.com/api-keys when done."
+          echo "::notice::APK link: see the most recent build on the Expo dashboard for this project."
+          echo "::warning::This APK has the OpenAI key bundled into the JS. Do not distribute. Rotate the key on https://platform.openai.com/api-keys when done."

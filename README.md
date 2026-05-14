@@ -103,12 +103,37 @@ automatic trigger.
 2. Click **Run workflow** → pick a branch → **Run workflow**.
 3. The workflow runs, in order:
    - `npm ci`
-   - writes `.env` from the secrets (file-redirection only; never logged)
+   - pushes the secrets into EAS as managed env vars for the `preview`
+     environment via `eas env:create --force --visibility secret`
    - `npx tsc --noEmit`
    - `npx expo config --type prebuild`
    - `eas build --platform android --profile preview --non-interactive`
 4. After ~15-25 minutes, the workflow log prints the build URL like
    `https://expo.dev/accounts/<your-account>/projects/dwhi/builds/<uuid>`.
+
+### How the OpenAI key reaches the APK
+
+The flow is **EAS-native**, not `.env`-based:
+
+1. The workflow calls `eas env:create --environment preview` to register
+   each secret on Expo's servers, scoped to the project. With
+   `--visibility secret`, values are encrypted at rest and only injected
+   into a build worker's `process.env` at build time — they cannot be
+   read back from the dashboard or CLI.
+2. When EAS spins up the build worker, it populates `process.env` with
+   the `preview` environment's variables **before** Metro starts.
+3. `app.config.js` runs on that worker, reads
+   `process.env.EXPO_PUBLIC_OPENAI_API_KEY`, and copies it into
+   `expoConfig.extra.openaiApiKey`. The model name follows the same
+   path. Safe diagnostics (length only, never the value) are logged.
+4. Expo bakes `expoConfig.extra` into the APK's manifest. The app reads
+   `Constants.expoConfig.extra.openaiApiKey` first in `src/services/env.ts`,
+   so even if Metro's `process.env.EXPO_PUBLIC_*` inlining had a hiccup
+   the value still arrives.
+
+For local development (`npx expo start`), Expo CLI reads `.env` directly
+and populates `process.env.EXPO_PUBLIC_*` for Metro — the fallback path
+in `env.ts` picks that up. `.env` is gitignored and never committed.
 
 ### APK link location
 
@@ -130,18 +155,29 @@ into the JavaScript. Anyone who has the APK file can extract the key.
 - **Do not distribute** the APK. Install it only on devices you control.
 - **Rotate the key when you're done** — revoke at
   https://platform.openai.com/api-keys and update the GitHub secret
-  before triggering a new build.
+  (and re-run the workflow once so the new key gets pushed via
+  `eas env:create --force`) before installing a new build.
+- The Settings screen in-app shows only the last 4 characters of the key
+  for verification — it never prints the full value, and the GitHub
+  Actions logs only print the **length**.
 - For a real distribution build, move the OpenAI call behind a server
   proxy and drop `EXPO_PUBLIC_OPENAI_API_KEY` from the bundle entirely.
 
-### How `.env` stays out of git
+### Verifying the build picked up the key
 
-- `.env` is gitignored (see `.gitignore` line 10) and never committed.
-- The workflow writes `.env` only on the runner via shell redirection;
-  the value never appears in step output.
-- A repo-local `.easignore` mirrors `.gitignore` but allows `.env` so
-  EAS Build can upload it. The file lives only on the ephemeral EAS
-  worker for the duration of the build and is discarded with the runner.
+After the workflow finishes:
+
+1. Open the build log and look for two lines in the **Run EAS Build** step:
+   ```
+   [dwhi] OpenAI key present: yes (length 56)
+   [dwhi] OpenAI model: default (gpt-4o-mini)
+   ```
+   These come from `app.config.js` and confirm the env reached the worker.
+2. Install the APK on your device.
+3. Open the app → **gear icon → Settings**:
+   - **OpenAI receipt parsing: Enabled** (green)
+   - **Key: …xxxx** (last 4 only)
+4. From home, tap **Receipt** — the badge should say *"AI parsing on"*.
 
 ## Layout
 
