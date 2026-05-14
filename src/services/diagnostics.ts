@@ -1,9 +1,19 @@
 import { getDb } from '@/db/database';
-import { getOpenAIKey, getOpenAIModel, isOpenAIConfigured } from './env';
+import {
+  getConfigSource,
+  getOpenAIKey,
+  getOpenAIModel,
+  getProbeSnapshot,
+  isOpenAIConfigured,
+  type ConfigSource,
+} from './env';
 
 export interface Diagnostics {
   aiEnabled: boolean;
   aiModel: string;
+  aiKeyLength: number;
+  configSource: ConfigSource;
+  probeSnapshot: Record<ConfigSource, boolean>;
   dbReady: boolean;
   itemCount: number;
   receiptCount: number;
@@ -13,13 +23,12 @@ export interface Diagnostics {
 }
 
 /**
- * Reads a snapshot of app state for the Settings/Diagnostics screen. Never
- * throws — every probe is wrapped so a missing table or open-failure just
- * shows up as `dbReady: false` instead of a red error screen.
+ * Snapshot of app state for the Settings screen. Never throws — each probe
+ * is wrapped so a missing table or open-failure shows up as `dbReady: false`
+ * instead of a red error screen.
  */
 export async function readDiagnostics(): Promise<Diagnostics> {
-  const aiEnabled = isOpenAIConfigured();
-  const aiModel = getOpenAIModel();
+  const apiKey = getOpenAIKey();
 
   let dbReady = false;
   let itemCount = 0;
@@ -46,8 +55,11 @@ export async function readDiagnostics(): Promise<Diagnostics> {
   }
 
   return {
-    aiEnabled,
-    aiModel,
+    aiEnabled: isOpenAIConfigured(),
+    aiModel: getOpenAIModel(),
+    aiKeyLength: apiKey?.length ?? 0,
+    configSource: getConfigSource(),
+    probeSnapshot: getProbeSnapshot(),
     dbReady,
     itemCount,
     receiptCount,
@@ -58,8 +70,8 @@ export async function readDiagnostics(): Promise<Diagnostics> {
 }
 
 /**
- * Last four chars of the configured key for visual confirmation that a key is
- * actually present without leaking the full secret on-screen.
+ * Last four chars of the configured key for visual confirmation that a key
+ * is actually present. Never exposes the full secret on-screen.
  */
 export function getKeyHint(): string | null {
   const key = getOpenAIKey();

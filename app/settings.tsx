@@ -40,9 +40,19 @@ export default function SettingsScreen() {
             <Card>
               <Row label="OpenAI receipt parsing" value={diag.aiEnabled ? 'Enabled' : 'Disabled'} tone={diag.aiEnabled ? 'good' : 'muted'} />
               <Row label="OpenAI model" value={diag.aiModel} />
+              <Row label="Key length" value={String(diag.aiKeyLength)} tone={diag.aiKeyLength > 0 ? 'good' : 'muted'} />
               {diag.aiEnabled ? (
                 <Row label="Key" value={getKeyHint() ?? '—'} mono />
               ) : null}
+            </Card>
+
+            <Card>
+              <Text style={styles.cardHeading}>Config source</Text>
+              <Row label="Resolved from" value={diag.configSource} tone={diag.configSource === 'none' ? 'warn' : 'good'} mono />
+              <Row label="expoConfig.extra" value={diag.probeSnapshot.expoConfig ? 'present' : 'empty'} tone={diag.probeSnapshot.expoConfig ? 'good' : 'muted'} mono />
+              <Row label="manifest2.extra.expoClient.extra" value={diag.probeSnapshot.manifest2 ? 'present' : 'empty'} tone={diag.probeSnapshot.manifest2 ? 'good' : 'muted'} mono />
+              <Row label="manifest.extra" value={diag.probeSnapshot.manifest ? 'present' : 'empty'} tone={diag.probeSnapshot.manifest ? 'good' : 'muted'} mono />
+              <Row label="process.env.EXPO_PUBLIC_*" value={diag.probeSnapshot['process.env'] ? 'present' : 'empty'} tone={diag.probeSnapshot['process.env'] ? 'good' : 'muted'} mono />
             </Card>
 
             <Card>
@@ -111,6 +121,13 @@ const styles = StyleSheet.create({
   heading: {
     ...typography.heading,
     color: colors.textPrimary,
+  },
+  cardHeading: {
+    ...typography.label,
+    color: colors.textSecondary,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+    marginBottom: spacing.xs,
   },
   loading: {
     paddingVertical: spacing.xl,

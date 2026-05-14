@@ -1,47 +1,125 @@
 /**
  * Resolves OpenAI env values at app runtime.
  *
- * Reads in this order:
- *   1. `Constants.expoConfig.extra.*` — populated by app.config.js at build
- *      time. Reliable on EAS builds because the value is baked into the
- *      APK's manifest, not subject to Metro inlining quirks.
- *   2. `process.env.EXPO_PUBLIC_*` — populated by Metro when running locally
- *      with `expo start` (Expo CLI auto-loads .env there).
+ * Why this is so defensive:
  *
- * If neither path yields a value, we return null and the rest of the app
- * falls back to the mock receipt parser.
+ *   `Constants.expoConfig` (the modern API) can be null in production EAS
+ *   builds that don't use expo-updates. The same build-time `extra` block
+ *   may instead surface under:
+ *
+ *     - Constants.manifest2.extra.expoClient.extra   (EAS Update / new manifest)
+ *     - Constants.manifest.extra                     (legacy classic manifest)
+ *
+ *   We probe all three in order, then fall back to process.env for local
+ *   `npx expo start` (where Expo CLI auto-loads .env). The first probe that
+ *   yields a non-empty string wins, and `getConfigSource()` reports which
+ *   path it was — surfaced in Settings so we can diagnose future builds
+ *   without another round trip.
  */
 
 import Constants from 'expo-constants';
 
-const extra = (Constants.expoConfig?.extra ?? {}) as Record<string, unknown>;
+export type ConfigSource =
+  | 'expoConfig'
+  | 'manifest2'
+  | 'manifest'
+  | 'process.env'
+  | 'none';
 
-function fromExtra(key: string): string | null {
-  const value = extra[key];
+interface Resolved {
+  source: ConfigSource;
+  apiKey: string | null;
+  model: string | null;
+}
+
+function asNonEmptyString(value: unknown): string | null {
   if (typeof value !== 'string') return null;
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : null;
 }
 
-function fromEnv(name: string): string | null {
-  const value = (process.env as Record<string, string | undefined>)[name];
-  if (typeof value !== 'string') return null;
-  const trimmed = value.trim();
-  return trimmed.length > 0 ? trimmed : null;
+function probe(extra: Record<string, unknown> | null | undefined): {
+  apiKey: string | null;
+  model: string | null;
+} {
+  if (!extra) return { apiKey: null, model: null };
+  return {
+    apiKey: asNonEmptyString(extra.openaiApiKey),
+    model: asNonEmptyString(extra.openaiModel),
+  };
+}
+
+function resolve(): Resolved {
+  // `Constants` has different shapes across SDKs; cast to any once so each
+  // probe stays terse and we tolerate missing fields gracefully.
+  const c = Constants as unknown as Record<string, any>;
+
+  const candidates: Array<{ source: ConfigSource; extra: any }> = [
+    { source: 'expoConfig', extra: c.expoConfig?.extra },
+    { source: 'manifest2', extra: c.manifest2?.extra?.expoClient?.extra },
+    { source: 'manifest', extra: c.manifest?.extra },
+  ];
+
+  for (const candidate of candidates) {
+    const { apiKey, model } = probe(candidate.extra);
+    if (apiKey || model) {
+      return { source: candidate.source, apiKey, model };
+    }
+  }
+
+  // Local dev fallback. In production APKs `process.env.EXPO_PUBLIC_*` is
+  // either inlined by Metro (which is the path that's been unreliable) or
+  // absent entirely; either way an `extra` hit above takes precedence.
+  const envApiKey = asNonEmptyString(
+    (process.env as Record<string, string | undefined>).EXPO_PUBLIC_OPENAI_API_KEY,
+  );
+  const envModel = asNonEmptyString(
+    (process.env as Record<string, string | undefined>).EXPO_PUBLIC_OPENAI_MODEL,
+  );
+  if (envApiKey || envModel) {
+    return { source: 'process.env', apiKey: envApiKey, model: envModel };
+  }
+
+  return { source: 'none', apiKey: null, model: null };
+}
+
+let cached: Resolved | null = null;
+function get(): Resolved {
+  if (!cached) cached = resolve();
+  return cached;
 }
 
 export function getOpenAIKey(): string | null {
-  return fromExtra('openaiApiKey') ?? fromEnv('EXPO_PUBLIC_OPENAI_API_KEY');
+  return get().apiKey;
 }
 
 export function getOpenAIModel(): string {
-  return (
-    fromExtra('openaiModel') ??
-    fromEnv('EXPO_PUBLIC_OPENAI_MODEL') ??
-    'gpt-4o-mini'
-  );
+  return get().model ?? 'gpt-4o-mini';
 }
 
 export function isOpenAIConfigured(): boolean {
   return getOpenAIKey() !== null;
+}
+
+export function getConfigSource(): ConfigSource {
+  return get().source;
+}
+
+/**
+ * Reports which Constants paths were *populated* on this runtime, regardless
+ * of whether they had our keys. Surfaced in Settings to make it obvious when
+ * the embedded manifest is missing entirely vs. present-but-empty.
+ */
+export function getProbeSnapshot(): Record<ConfigSource, boolean> {
+  const c = Constants as unknown as Record<string, any>;
+  return {
+    expoConfig: !!c.expoConfig?.extra,
+    manifest2: !!c.manifest2?.extra?.expoClient?.extra,
+    manifest: !!c.manifest?.extra,
+    'process.env': !!(
+      (process.env as Record<string, string | undefined>).EXPO_PUBLIC_OPENAI_API_KEY ??
+      (process.env as Record<string, string | undefined>).EXPO_PUBLIC_OPENAI_MODEL
+    ),
+    none: false,
+  };
 }
