@@ -130,7 +130,76 @@ The user is never trapped on the scanner:
   again (IN or OUT), it links to the same item even if the name in
   the DB drifted. Same product, same SKU.
 
-## Building an Android APK (EAS Build, CI)
+## Building an Android APK (GitHub Actions, direct Gradle)
+
+The primary CI path is a `workflow_dispatch`-only GitHub Actions job that
+runs `expo prebuild` and `./gradlew assembleRelease` directly on a
+GitHub-hosted Ubuntu runner. **No EAS Build minutes are consumed.** The
+APK is signed with the auto-generated debug keystore — fine for personal
+sideloading, not for distribution.
+
+### One-time setup
+
+In **Settings → Secrets and variables → Actions**, add:
+
+| Secret | Required | Purpose |
+| --- | --- | --- |
+| `EXPO_PUBLIC_OPENAI_API_KEY` | optional | OpenAI key the APK will use; leave blank for a mock-only APK |
+| `EXPO_PUBLIC_OPENAI_MODEL` | optional | Override the default `gpt-4o-mini` |
+
+> No `EXPO_TOKEN` needed — this workflow does not call `eas`.
+
+### Triggering a build
+
+1. Open **Actions → Build Android APK (direct, Gradle)**.
+2. Click **Run workflow** → pick a branch → **Run workflow**.
+3. The workflow runs, in order:
+   - `actions/setup-node@v4` (Node 20) + `actions/setup-java@v4` (Temurin 17)
+   - `android-actions/setup-android@v3` to accept SDK licenses
+   - `npm ci`
+   - writes `.env` from the GitHub secrets via shell redirection (the
+     value is never echoed; the step log only prints "OpenAI key
+     present: yes (length 56)" or a warning when absent)
+   - `npx tsc --noEmit`
+   - `npx expo config --type prebuild`
+   - `npx expo prebuild --platform android --non-interactive --clean`
+   - `cd android && ./gradlew assembleRelease --no-daemon`
+   - `actions/upload-artifact@v4` ships the APK
+4. After ~10-15 minutes the workflow run's summary page has a
+   **`dwhi-android-apk`** artifact. Click it to download
+   `app-release.apk` and sideload onto an Android device.
+
+### Exact artifact location
+
+- **Inside the runner**: `android/app/build/outputs/apk/release/app-release.apk`
+- **In the GitHub UI**: workflow run page → **Artifacts** section →
+  click **`dwhi-android-apk`** → downloads a zip containing
+  `app-release.apk`. Retention: 14 days.
+
+### ⚠️ Security & key rotation
+
+The APK ships with `EXPO_PUBLIC_OPENAI_API_KEY` inlined into the JS
+bundle. Anyone with the APK can extract the key.
+
+- **Do not distribute** the APK. Install it only on devices you control.
+- **Rotate the key when you're done** — revoke at
+  https://platform.openai.com/api-keys and update the GitHub secret
+  before kicking off another build.
+- Settings inside the app shows only the **last 4 characters** of the
+  key for verification — never the full value. CI logs print only the
+  key length.
+
+### Optional: EAS Build (older workflow)
+
+A second workflow, **Build Android APK (EAS, preview)**, still exists for
+users with EAS already configured. It produces the same kind of APK but
+uses Expo Application Services and consumes EAS Build minutes — so we
+no longer recommend it as the default. If you choose to use it, see the
+required `EXPO_TOKEN` setup, EAS env-var visibility notes, and the
+`eas env:create` flow in the workflow file
+(`.github/workflows/android-apk.yml`).
+
+## Building an Android APK (EAS Build, CI) — legacy/optional
 
 A `workflow_dispatch`-only GitHub Actions workflow drives an EAS Build that
 produces a single installable Android APK for personal testing. There is no

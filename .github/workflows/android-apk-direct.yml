@@ -1,0 +1,107 @@
+name: Build Android APK (direct, Gradle)
+
+# Manual trigger only. Builds an Android APK directly on the GitHub-hosted
+# runner with `expo prebuild` + `./gradlew assembleRelease`, no EAS Build
+# minutes consumed. The APK is signed with the auto-generated debug
+# keystore — fine for personal testing, not for distribution.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-apk-direct-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Direct APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Check out repo
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Set up Java 17 (Temurin)
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK (accept licenses)
+        uses: android-actions/setup-android@v3
+
+      - name: Show environment
+        run: |
+          echo "node: $(node --version)"
+          echo "npm:  $(npm --version)"
+          echo "java: $(java -version 2>&1 | head -1)"
+          echo "ANDROID_HOME=${ANDROID_HOME:-unset}"
+
+      - name: Install npm deps
+        run: npm ci
+
+      # Write the OpenAI env to .env on the runner. `expo prebuild` (and the
+      # Metro bundle Gradle invokes) auto-load this file via Expo CLI, so the
+      # values end up inlined into the JS bundle and on `expoConfig.extra`.
+      # File redirection only — values never appear in step output.
+      - name: Write build-time .env from repo secrets
+        env:
+          OPENAI_KEY: ${{ secrets.EXPO_PUBLIC_OPENAI_API_KEY }}
+          OPENAI_MODEL: ${{ secrets.EXPO_PUBLIC_OPENAI_MODEL }}
+        run: |
+          umask 077
+          {
+            if [ -n "${OPENAI_KEY}" ]; then
+              printf 'EXPO_PUBLIC_OPENAI_API_KEY=%s\n' "${OPENAI_KEY}"
+            fi
+            if [ -n "${OPENAI_MODEL}" ]; then
+              printf 'EXPO_PUBLIC_OPENAI_MODEL=%s\n' "${OPENAI_MODEL}"
+            fi
+          } > .env
+          if [ -n "${OPENAI_KEY}" ]; then
+            echo "OpenAI key present: yes (length: ${#OPENAI_KEY})"
+          else
+            echo "::warning::OpenAI key empty/unset — APK will use the mock parser."
+          fi
+
+      - name: Typecheck
+        run: npx tsc --noEmit
+
+      - name: Validate Expo config
+        run: npx expo config --type prebuild > /dev/null
+
+      - name: Expo prebuild (Android only, clean)
+        # --clean rebuilds android/ from scratch so a stale prebuild can't
+        # leak in. --non-interactive prevents any prompt from hanging CI.
+        run: npx expo prebuild --platform android --non-interactive --clean
+
+      - name: Gradle assembleRelease
+        working-directory: android
+        run: ./gradlew assembleRelease --stacktrace --no-daemon
+
+      - name: List build outputs
+        if: always()
+        run: |
+          ls -la android/app/build/outputs/apk/release/ || true
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: dwhi-android-apk
+          path: android/app/build/outputs/apk/release/*.apk
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Reminder
+        if: always()
+        run: |
+          echo "::notice::APK download: open this workflow run's summary and grab the 'dwhi-android-apk' artifact."
+          echo "::warning::APK has OpenAI key inlined. Do not distribute. Rotate the key on https://platform.openai.com/api-keys when done testing."
