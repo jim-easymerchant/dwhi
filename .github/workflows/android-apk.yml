@@ -38,9 +38,18 @@ jobs:
 
       # Push the secrets into the EAS-managed environment for the `preview`
       # build profile. This is the official EAS path for injecting build-time
-      # secrets — EAS populates the build worker's process.env with these
-      # values before Metro bundles. They are stored encrypted (--visibility
-      # secret) and overwritten each run with --force.
+      # config — EAS populates the build worker's process.env with these
+      # values before Metro bundles. They are overwritten each run via
+      # --force.
+      #
+      # Visibility note:
+      #   EAS forbids `--visibility secret` for any variable whose name
+      #   starts with `EXPO_PUBLIC_`, because Metro inlines those values
+      #   into the JS bundle that ships in the APK — the value is not, and
+      #   cannot be, kept secret from the device. We use `sensitive` for
+      #   the key (hidden in the EAS dashboard / `env:list` output but
+      #   still injected at build time) and `plaintext` for the model name
+      #   (not sensitive).
       #
       # SAFE diagnostics only: key length and presence — never the value,
       # never the last-N characters.
@@ -58,7 +67,7 @@ jobs:
               --environment preview \
               --name EXPO_PUBLIC_OPENAI_API_KEY \
               --value "${OPENAI_KEY}" \
-              --visibility secret \
+              --visibility sensitive \
               --non-interactive \
               --force
           else

@@ -103,8 +103,10 @@ automatic trigger.
 2. Click **Run workflow** → pick a branch → **Run workflow**.
 3. The workflow runs, in order:
    - `npm ci`
-   - pushes the secrets into EAS as managed env vars for the `preview`
-     environment via `eas env:create --force --visibility secret`
+   - pushes each value into EAS as a managed env var for the `preview`
+     environment via `eas env:create --force`. The API key uses
+     `--visibility sensitive`; the model name uses `--visibility plaintext`
+     (see the visibility note below).
    - `npx tsc --noEmit`
    - `npx expo config --type prebuild`
    - `eas build --platform android --profile preview --non-interactive`
@@ -116,10 +118,9 @@ automatic trigger.
 The flow is **EAS-native**, not `.env`-based:
 
 1. The workflow calls `eas env:create --environment preview` to register
-   each secret on Expo's servers, scoped to the project. With
-   `--visibility secret`, values are encrypted at rest and only injected
-   into a build worker's `process.env` at build time — they cannot be
-   read back from the dashboard or CLI.
+   each value on Expo's servers, scoped to the project. The key uses
+   `--visibility sensitive`, the model uses `--visibility plaintext`
+   (see below).
 2. When EAS spins up the build worker, it populates `process.env` with
    the `preview` environment's variables **before** Metro starts.
 3. `app.config.js` runs on that worker, reads
@@ -127,13 +128,48 @@ The flow is **EAS-native**, not `.env`-based:
    `expoConfig.extra.openaiApiKey`. The model name follows the same
    path. Safe diagnostics (length only, never the value) are logged.
 4. Expo bakes `expoConfig.extra` into the APK's manifest. The app reads
-   `Constants.expoConfig.extra.openaiApiKey` first in `src/services/env.ts`,
-   so even if Metro's `process.env.EXPO_PUBLIC_*` inlining had a hiccup
-   the value still arrives.
+   it via `Constants.expoConfig.extra.openaiApiKey` first in
+   `src/services/env.ts`, falling through to `manifest2.extra.expoClient.extra`
+   and `manifest.extra` so production APK builds without expo-updates
+   still resolve correctly.
 
 For local development (`npx expo start`), Expo CLI reads `.env` directly
 and populates `process.env.EXPO_PUBLIC_*` for Metro — the fallback path
 in `env.ts` picks that up. `.env` is gitignored and never committed.
+
+### Why `--visibility sensitive`, not `secret`?
+
+EAS rejects `--visibility secret` for any variable whose name begins with
+`EXPO_PUBLIC_`. The reasoning is structural:
+
+> "Variables prefixed with `EXPO_PUBLIC_` should never be considered as
+> secret. Use plain text or sensitive visibility options for
+> `EXPO_PUBLIC_` environment variables instead."
+
+`EXPO_PUBLIC_*` values are **inlined into the JavaScript bundle that
+ships in the APK** — anyone who can read the APK can recover them.
+Calling that "secret" would be a false promise from EAS's side, so the
+CLI blocks it.
+
+What the three visibilities actually do for a build:
+
+| visibility | EAS dashboard | EAS CLI `env:list` | injected into build worker |
+| --- | --- | --- | --- |
+| `plaintext` | shows value | shows value | yes |
+| `sensitive` | value hidden | value hidden | yes |
+| `secret` | encrypted; never readable | hidden | yes — **but rejected for `EXPO_PUBLIC_*`** |
+
+We use:
+- **`sensitive` for `EXPO_PUBLIC_OPENAI_API_KEY`** — keeps the value out
+  of the dashboard / `env:list`, while accepting that the APK itself
+  contains it.
+- **`plaintext` for `EXPO_PUBLIC_OPENAI_MODEL`** — the model name isn't
+  sensitive.
+
+The GitHub Actions secret (`EXPO_PUBLIC_OPENAI_API_KEY` set under
+**Settings → Secrets and variables → Actions**) still protects the key
+inside GitHub: stored encrypted, never echoed in step logs, never visible
+to repository readers. That layer is intact.
 
 ### APK link location
 
