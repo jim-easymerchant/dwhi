@@ -53,16 +53,19 @@ const KEYWORD_PROFILES: Array<{ keywords: string[]; profile: DecayProfile }> = [
   {
     profile: 'fast',
     keywords: [
+      // Kept tight: only words that are unambiguously perishable. We removed
+      // bare ingredient names like "tomato" because they also appear in
+      // shelf-stable condiments ("Heinz Tomato Ketchup") and were causing
+      // false fast-decay classifications.
       'milk', 'yogurt', 'cream', 'fresh', 'produce', 'bread', 'meat', 'fish',
-      'chicken', 'beef', 'pork', 'salad', 'lettuce', 'tomato', 'banana',
-      'berr', 'egg', 'avocado', 'tofu', 'hummus',
+      'chicken', 'beef', 'pork', 'salad', 'lettuce', 'banana', 'berr',
+      'egg', 'avocado', 'tofu', 'hummus',
     ],
   },
   {
     profile: 'medium',
     keywords: [
-      'cheese', 'juice', 'condiment', 'sauce', 'butter', 'tortilla',
-      'deli', 'pasta cooked',
+      'cheese', 'juice', 'butter', 'tortilla', 'deli', 'pasta cooked',
     ],
   },
   {
@@ -70,7 +73,8 @@ const KEYWORD_PROFILES: Array<{ keywords: string[]; profile: DecayProfile }> = [
     keywords: [
       'canned', 'jar', 'pickle', 'spice', 'pasta', 'noodle', 'rice', 'bean',
       'cereal', 'cracker', 'snack', 'chocolate', 'coffee', 'tea', 'flour',
-      'sugar', 'salt', 'vinegar', 'oil', 'honey', 'jam', 'condiments',
+      'sugar', 'salt', 'vinegar', 'oil', 'honey', 'jam', 'condiment',
+      'condiments', 'ketchup', 'mustard', 'mayo', 'sauce',
     ],
   },
   {
