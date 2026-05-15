@@ -1,5 +1,10 @@
 import { getDb, nowIso } from '@/db/database';
 import { toCanonicalKey } from '@/repositories/itemRepository';
+import {
+  getActiveDeviceId,
+  getActiveHouseholdId,
+  getActiveMemberId,
+} from '@/services/householdContext';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -91,6 +96,9 @@ export async function seedIfEmpty(): Promise<void> {
   if (await hasAnyItems()) return;
 
   const db = await getDb();
+  const householdId = getActiveHouseholdId();
+  const memberId = getActiveMemberId();
+  const deviceId = getActiveDeviceId();
   await db.withTransactionAsync(async () => {
     // Items
     const itemIds: number[] = [];
@@ -98,8 +106,9 @@ export async function seedIfEmpty(): Promise<void> {
     for (const it of SEED_ITEMS) {
       const result = await db.runAsync(
         `INSERT INTO items
-           (manufacturer, name, category, container_type, size, canonical_key, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?);`,
+           (manufacturer, name, category, container_type, size, canonical_key,
+            created_at, updated_at, household_id)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);`,
         it.manufacturer,
         it.name,
         it.category,
@@ -108,6 +117,7 @@ export async function seedIfEmpty(): Promise<void> {
         toCanonicalKey(it.name, it.manufacturer),
         now,
         now,
+        householdId,
       );
       itemIds.push(result.lastInsertRowId);
     }
@@ -119,37 +129,47 @@ export async function seedIfEmpty(): Promise<void> {
       for (const ev of item.events) {
         await db.runAsync(
           `INSERT INTO inventory_events
-             (item_id, direction, quantity, image_uri, raw_ai_json, source, created_at)
-           VALUES (?, ?, ?, NULL, NULL, ?, ?);`,
+             (item_id, direction, quantity, image_uri, raw_ai_json, source, created_at,
+              household_id, created_by_member_id, created_by_device_id)
+           VALUES (?, ?, ?, NULL, NULL, ?, ?, ?, ?, ?);`,
           itemId,
           ev.direction,
           ev.quantity,
           ev.direction === 'IN' ? 'receipt' : 'manual',
           daysAgo(ev.daysAgo),
+          householdId,
+          memberId,
+          deviceId,
         );
       }
     }
 
     // Demo receipt
     const receiptResult = await db.runAsync(
-      `INSERT INTO receipts (store_name, purchased_at, total, image_uri, created_at)
-       VALUES (?, ?, ?, NULL, ?);`,
+      `INSERT INTO receipts
+         (store_name, purchased_at, total, image_uri, created_at,
+          household_id, created_by_member_id, created_by_device_id)
+       VALUES (?, ?, ?, NULL, ?, ?, ?, ?);`,
       SEED_RECEIPT.storeName,
       daysAgo(SEED_RECEIPT.daysAgo),
       SEED_RECEIPT.total,
       now,
+      householdId,
+      memberId,
+      deviceId,
     );
     const receiptId = receiptResult.lastInsertRowId;
     for (const ri of SEED_RECEIPT.items) {
       await db.runAsync(
         `INSERT INTO receipt_items
-           (receipt_id, canonical_name, raw_name, quantity, estimated_category)
-         VALUES (?, ?, ?, ?, ?);`,
+           (receipt_id, canonical_name, raw_name, quantity, estimated_category, household_id)
+         VALUES (?, ?, ?, ?, ?, ?);`,
         receiptId,
         ri.canonicalName,
         ri.rawName,
         ri.quantity,
         ri.estimatedCategory,
+        householdId,
       );
     }
   });

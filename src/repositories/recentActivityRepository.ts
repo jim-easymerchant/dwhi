@@ -1,4 +1,5 @@
 import { getDb } from '@/db/database';
+import { getActiveHouseholdId } from '@/services/householdContext';
 
 export type RecentActivityKind = 'event' | 'receipt';
 
@@ -41,20 +42,25 @@ interface UnionRow {
  */
 export async function listRecentActivity(limit = 3): Promise<RecentActivityEntry[]> {
   const db = await getDb();
+  const householdId = getActiveHouseholdId();
   const rows = await db.getAllAsync<UnionRow>(
     `SELECT 'event' AS kind, e.id AS id, e.created_at AS created_at,
             e.direction AS direction, i.name AS item_name, e.quantity AS quantity,
             NULL AS store_name, NULL AS item_count
        FROM inventory_events e
        JOIN items i ON i.id = e.item_id
+      WHERE e.household_id = ?
      UNION ALL
      SELECT 'receipt' AS kind, r.id AS id, r.created_at AS created_at,
             NULL AS direction, NULL AS item_name, NULL AS quantity,
             r.store_name AS store_name,
             (SELECT COUNT(*) FROM receipt_items WHERE receipt_id = r.id) AS item_count
        FROM receipts r
+      WHERE r.household_id = ?
      ORDER BY created_at DESC
      LIMIT ?;`,
+    householdId,
+    householdId,
     limit,
   );
 

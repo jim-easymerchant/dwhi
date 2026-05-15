@@ -1,4 +1,9 @@
 import { getDb, nowIso } from '@/db/database';
+import {
+  getActiveDeviceId,
+  getActiveHouseholdId,
+  getActiveMemberId,
+} from '@/services/householdContext';
 import type { ConfidenceLevel } from '@/services/confidence/confidenceTypes';
 
 const DAY_MS = 86_400_000;
@@ -20,19 +25,25 @@ export async function recordFeedback(
 ): Promise<void> {
   const db = await getDb();
   await db.runAsync(
-    `INSERT INTO ask_feedback (normalized_term, answer_level, user_feedback, created_at)
-     VALUES (?, ?, ?, ?);`,
+    `INSERT INTO ask_feedback
+       (normalized_term, answer_level, user_feedback, created_at,
+        household_id, created_by_member_id, created_by_device_id)
+     VALUES (?, ?, ?, ?, ?, ?, ?);`,
     normalizedTerm,
     answerLevel,
     userFeedback,
     nowIso(),
+    getActiveHouseholdId(),
+    getActiveMemberId(),
+    getActiveDeviceId(),
   );
 }
 
 export async function countAll(): Promise<number> {
   const db = await getDb();
   const row = await db.getFirstAsync<{ c: number }>(
-    'SELECT COUNT(*) AS c FROM ask_feedback;',
+    'SELECT COUNT(*) AS c FROM ask_feedback WHERE household_id = ?;',
+    getActiveHouseholdId(),
   );
   return row?.c ?? 0;
 }
@@ -59,6 +70,7 @@ export async function summaryForTerm(
 ): Promise<FeedbackSummaryForTerm> {
   const db = await getDb();
   const sevenDaysAgo = new Date(now - 7 * DAY_MS).toISOString();
+  const householdId = getActiveHouseholdId();
 
   const latestRow = await db.getFirstAsync<{
     user_feedback: AskFeedbackKind;
@@ -66,9 +78,10 @@ export async function summaryForTerm(
   }>(
     `SELECT user_feedback, created_at
        FROM ask_feedback
-      WHERE normalized_term = ?
+      WHERE household_id = ? AND normalized_term = ?
       ORDER BY created_at DESC
       LIMIT 1;`,
+    householdId,
     normalizedTerm,
   );
 
@@ -82,7 +95,8 @@ export async function summaryForTerm(
        COUNT(CASE WHEN user_feedback = 'dont'   THEN 1 END) AS d,
        COUNT(CASE WHEN user_feedback = 'unsure' THEN 1 END) AS u
        FROM ask_feedback
-      WHERE normalized_term = ? AND created_at >= ?;`,
+      WHERE household_id = ? AND normalized_term = ? AND created_at >= ?;`,
+    householdId,
     normalizedTerm,
     sevenDaysAgo,
   );

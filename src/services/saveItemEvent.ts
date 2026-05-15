@@ -1,5 +1,10 @@
 import { getDb, nowIso } from '@/db/database';
 import { toCanonicalKey } from '@/repositories/itemRepository';
+import {
+  getActiveDeviceId,
+  getActiveHouseholdId,
+  getActiveMemberId,
+} from './householdContext';
 import type { Direction, ItemSource } from '@/types/models';
 
 export interface SaveItemEventInput {
@@ -38,6 +43,9 @@ export interface SaveItemEventResult {
  * Match priority for existing item:
  *   1. items.barcode == input.barcode  (most reliable — same physical SKU)
  *   2. items.canonical_key == lower(manufacturer + name)  (name fallback)
+ *
+ * Every read + write is scoped to the active household; the event row is
+ * stamped with the active member + device for future audit / sync.
  */
 export async function saveItemEvent(
   input: SaveItemEventInput,
@@ -45,6 +53,9 @@ export async function saveItemEvent(
   const trimmedName = input.name.trim() || 'Unnamed item';
   const canonicalKey = toCanonicalKey(trimmedName, input.manufacturer ?? undefined);
   const trimmedBarcode = input.barcode?.trim() || null;
+  const householdId = getActiveHouseholdId();
+  const memberId = getActiveMemberId();
+  const deviceId = getActiveDeviceId();
   const db = await getDb();
   const now = nowIso();
 
@@ -56,13 +67,15 @@ export async function saveItemEvent(
 
     if (trimmedBarcode) {
       existing = await db.getFirstAsync<{ id: number }>(
-        'SELECT id FROM items WHERE barcode = ? LIMIT 1;',
+        'SELECT id FROM items WHERE household_id = ? AND barcode = ? LIMIT 1;',
+        householdId,
         trimmedBarcode,
       );
     }
     if (!existing) {
       existing = await db.getFirstAsync<{ id: number }>(
-        'SELECT id FROM items WHERE canonical_key = ? LIMIT 1;',
+        'SELECT id FROM items WHERE household_id = ? AND canonical_key = ? LIMIT 1;',
+        householdId,
         canonicalKey,
       );
     }
@@ -79,7 +92,7 @@ export async function saveItemEvent(
                 source = COALESCE(?, source),
                 raw_lookup_json = COALESCE(?, raw_lookup_json),
                 updated_at = ?
-          WHERE id = ?;`,
+          WHERE id = ? AND household_id = ?;`,
         input.manufacturer,
         input.category,
         input.containerType,
@@ -89,13 +102,14 @@ export async function saveItemEvent(
         input.rawLookupJson ?? null,
         now,
         itemId,
+        householdId,
       );
     } else {
       const insert = await db.runAsync(
         `INSERT INTO items
            (manufacturer, name, category, container_type, size, canonical_key,
-            barcode, source, raw_lookup_json, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
+            barcode, source, raw_lookup_json, created_at, updated_at, household_id)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
         input.manufacturer,
         trimmedName,
         input.category,
@@ -107,14 +121,16 @@ export async function saveItemEvent(
         input.rawLookupJson ?? null,
         now,
         now,
+        householdId,
       );
       itemId = insert.lastInsertRowId;
     }
 
     const eventInsert = await db.runAsync(
       `INSERT INTO inventory_events
-         (item_id, direction, quantity, image_uri, raw_ai_json, source, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?);`,
+         (item_id, direction, quantity, image_uri, raw_ai_json, source, created_at,
+          household_id, created_by_member_id, created_by_device_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
       itemId,
       input.direction,
       input.quantity,
@@ -122,6 +138,9 @@ export async function saveItemEvent(
       input.rawAiJson,
       input.source,
       now,
+      householdId,
+      memberId,
+      deviceId,
     );
     eventId = eventInsert.lastInsertRowId;
   });

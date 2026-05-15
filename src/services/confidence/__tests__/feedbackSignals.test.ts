@@ -96,6 +96,7 @@ describe('feedbackSignals', () => {
           barcode: null,
           source: null,
           rawLookupJson: null,
+          householdId: 1,
           createdAt: daysAgoIso(10),
           updatedAt: daysAgoIso(2),
         },

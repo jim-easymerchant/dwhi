@@ -1,4 +1,5 @@
 import { getDb, nowIso } from '@/db/database';
+import { getActiveHouseholdId } from '@/services/householdContext';
 import type { Item, NewItem } from '@/types/models';
 
 interface ItemRow {
@@ -14,6 +15,7 @@ interface ItemRow {
   raw_lookup_json: string | null;
   created_at: string;
   updated_at: string;
+  household_id: number | null;
 }
 
 function rowToItem(row: ItemRow): Item {
@@ -30,6 +32,7 @@ function rowToItem(row: ItemRow): Item {
     rawLookupJson: row.raw_lookup_json,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+    householdId: row.household_id,
   };
 }
 
@@ -45,7 +48,8 @@ export function toCanonicalKey(name: string, manufacturer?: string | null): stri
 export async function findByCanonicalKey(key: string): Promise<Item | null> {
   const db = await getDb();
   const row = await db.getFirstAsync<ItemRow>(
-    'SELECT * FROM items WHERE canonical_key = ? LIMIT 1;',
+    'SELECT * FROM items WHERE household_id = ? AND canonical_key = ? LIMIT 1;',
+    getActiveHouseholdId(),
     key,
   );
   return row ? rowToItem(row) : null;
@@ -56,7 +60,8 @@ export async function findByBarcode(barcode: string): Promise<Item | null> {
   const trimmed = barcode.trim();
   if (!trimmed) return null;
   const row = await db.getFirstAsync<ItemRow>(
-    'SELECT * FROM items WHERE barcode = ? LIMIT 1;',
+    'SELECT * FROM items WHERE household_id = ? AND barcode = ? LIMIT 1;',
+    getActiveHouseholdId(),
     trimmed,
   );
   return row ? rowToItem(row) : null;
@@ -67,9 +72,11 @@ export async function searchByName(query: string, limit = 10): Promise<Item[]> {
   const like = `%${query.toLowerCase()}%`;
   const rows = await db.getAllAsync<ItemRow>(
     `SELECT * FROM items
-     WHERE LOWER(name) LIKE ? OR LOWER(canonical_key) LIKE ? OR LOWER(category) LIKE ?
+     WHERE household_id = ?
+       AND (LOWER(name) LIKE ? OR LOWER(canonical_key) LIKE ? OR LOWER(category) LIKE ?)
      ORDER BY updated_at DESC
      LIMIT ?;`,
+    getActiveHouseholdId(),
     like,
     like,
     like,
@@ -80,14 +87,19 @@ export async function searchByName(query: string, limit = 10): Promise<Item[]> {
 
 export async function getById(id: number): Promise<Item | null> {
   const db = await getDb();
-  const row = await db.getFirstAsync<ItemRow>('SELECT * FROM items WHERE id = ?;', id);
+  const row = await db.getFirstAsync<ItemRow>(
+    'SELECT * FROM items WHERE id = ? AND household_id = ?;',
+    id,
+    getActiveHouseholdId(),
+  );
   return row ? rowToItem(row) : null;
 }
 
 export async function listAll(limit = 100): Promise<Item[]> {
   const db = await getDb();
   const rows = await db.getAllAsync<ItemRow>(
-    'SELECT * FROM items ORDER BY updated_at DESC LIMIT ?;',
+    'SELECT * FROM items WHERE household_id = ? ORDER BY updated_at DESC LIMIT ?;',
+    getActiveHouseholdId(),
     limit,
   );
   return rows.map(rowToItem);
@@ -98,11 +110,12 @@ export async function createItem(input: NewItem): Promise<Item> {
   const now = nowIso();
   const canonicalKey =
     input.canonicalKey ?? toCanonicalKey(input.name, input.manufacturer ?? undefined);
+  const householdId = getActiveHouseholdId();
   const result = await db.runAsync(
     `INSERT INTO items
        (manufacturer, name, category, container_type, size, canonical_key,
-        barcode, source, raw_lookup_json, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
+        barcode, source, raw_lookup_json, created_at, updated_at, household_id)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
     input.manufacturer,
     input.name,
     input.category,
@@ -114,6 +127,7 @@ export async function createItem(input: NewItem): Promise<Item> {
     input.rawLookupJson ?? null,
     now,
     now,
+    householdId,
   );
   return {
     id: result.lastInsertRowId,
@@ -128,6 +142,7 @@ export async function createItem(input: NewItem): Promise<Item> {
     rawLookupJson: input.rawLookupJson ?? null,
     createdAt: now,
     updatedAt: now,
+    householdId,
   };
 }
 
@@ -162,7 +177,7 @@ export async function upsertItem(input: NewItem): Promise<Item> {
              source = COALESCE(?, source),
              raw_lookup_json = COALESCE(?, raw_lookup_json),
              updated_at = ?
-       WHERE id = ?;`,
+       WHERE id = ? AND household_id = ?;`,
       input.manufacturer,
       input.category,
       input.containerType,
@@ -172,6 +187,7 @@ export async function upsertItem(input: NewItem): Promise<Item> {
       input.rawLookupJson ?? null,
       now,
       existing.id,
+      getActiveHouseholdId(),
     );
     return {
       ...existing,

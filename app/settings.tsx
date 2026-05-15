@@ -104,6 +104,24 @@ export default function SettingsScreen() {
               <Text style={styles.privacyBody}>{diag.voice.mode}</Text>
             </Card>
 
+            {diag.household ? (
+              <Card>
+                <Text style={styles.cardHeading}>Household</Text>
+                <Row label="Name" value={diag.household.name} />
+                <Row
+                  label="Member"
+                  value={`${diag.household.memberDisplayName} (${diag.household.memberRole})`}
+                />
+                <Row label="Device" value={diag.household.deviceName} />
+                <Row label="Device UUID" value={diag.household.deviceUuidShort} mono />
+                <Row
+                  label="Sync status"
+                  value={diag.household.syncStatus}
+                  tone="muted"
+                />
+              </Card>
+            ) : null}
+
             <Card>
               <Row label="App mode" value={diag.appMode} />
             </Card>

@@ -39,9 +39,40 @@ async function runInit(): Promise<void> {
   await tryAddColumn('items', 'barcode', 'TEXT');
   await tryAddColumn('items', 'source', 'TEXT');
   await tryAddColumn('items', 'raw_lookup_json', 'TEXT');
-  // Index is idempotent via IF NOT EXISTS — safe to re-run.
+  // Household scope columns. Idempotent — duplicate-column errors are
+  // swallowed so existing installs upgrade cleanly.
+  await tryAddColumn('items', 'household_id', 'INTEGER');
+  await tryAddColumn('inventory_events', 'household_id', 'INTEGER');
+  await tryAddColumn('inventory_events', 'created_by_member_id', 'INTEGER');
+  await tryAddColumn('inventory_events', 'created_by_device_id', 'INTEGER');
+  await tryAddColumn('receipts', 'household_id', 'INTEGER');
+  await tryAddColumn('receipts', 'created_by_member_id', 'INTEGER');
+  await tryAddColumn('receipts', 'created_by_device_id', 'INTEGER');
+  await tryAddColumn('receipt_items', 'household_id', 'INTEGER');
+  await tryAddColumn('ask_history', 'household_id', 'INTEGER');
+  await tryAddColumn('ask_history', 'created_by_member_id', 'INTEGER');
+  await tryAddColumn('ask_history', 'created_by_device_id', 'INTEGER');
+  await tryAddColumn('ask_feedback', 'household_id', 'INTEGER');
+  await tryAddColumn('ask_feedback', 'created_by_member_id', 'INTEGER');
+  await tryAddColumn('ask_feedback', 'created_by_device_id', 'INTEGER');
+  // Indexes are idempotent via IF NOT EXISTS — safe to re-run.
   await db.execAsync(
     'CREATE INDEX IF NOT EXISTS idx_items_barcode ON items(barcode);',
+  );
+  await db.execAsync(
+    'CREATE INDEX IF NOT EXISTS idx_items_household_id ON items(household_id);',
+  );
+  await db.execAsync(
+    'CREATE INDEX IF NOT EXISTS idx_inventory_events_household_id ON inventory_events(household_id);',
+  );
+  await db.execAsync(
+    'CREATE INDEX IF NOT EXISTS idx_receipts_household_id ON receipts(household_id);',
+  );
+  await db.execAsync(
+    'CREATE INDEX IF NOT EXISTS idx_ask_history_household_id ON ask_history(household_id);',
+  );
+  await db.execAsync(
+    'CREATE INDEX IF NOT EXISTS idx_ask_feedback_household_id ON ask_feedback(household_id);',
   );
 }
 

@@ -13,6 +13,7 @@ import { countAll as countAllAsks } from '@/repositories/askHistoryRepository';
 import { countAll as countAllFeedback } from '@/repositories/askFeedbackRepository';
 import { countLearnedPatterns } from './behaviorStats';
 import { speechService } from './voice/speechService';
+import { getActiveContextOrNull } from './householdContext';
 
 export interface Diagnostics {
   aiEnabled: boolean;
@@ -36,6 +37,15 @@ export interface Diagnostics {
     mode: string;
     kind: 'native' | 'manual';
   };
+  household: {
+    name: string;
+    memberDisplayName: string;
+    memberRole: 'owner' | 'member';
+    deviceName: string;
+    /** Short suffix of the device UUID; full UUID never shown in UI. */
+    deviceUuidShort: string;
+    syncStatus: 'Local only';
+  } | null;
 }
 
 /**
@@ -98,6 +108,22 @@ export async function readDiagnostics(): Promise<Diagnostics> {
       mode: speechService.describeMode(),
       kind: speechService.kind,
     },
+    household: buildHouseholdDiagnostic(),
+  };
+}
+
+function buildHouseholdDiagnostic(): Diagnostics['household'] {
+  const ctx = getActiveContextOrNull();
+  if (!ctx) return null;
+  const uuid = ctx.device.deviceUuid;
+  const short = uuid.length > 8 ? `…${uuid.slice(-8)}` : uuid;
+  return {
+    name: ctx.household.name,
+    memberDisplayName: ctx.member.displayName,
+    memberRole: ctx.member.role,
+    deviceName: ctx.device.deviceName,
+    deviceUuidShort: short,
+    syncStatus: 'Local only',
   };
 }
 

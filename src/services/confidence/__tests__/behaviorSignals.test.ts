@@ -21,6 +21,7 @@ function fakeItem(overrides: Partial<Item> = {}): Item {
     barcode: null,
     source: null,
     rawLookupJson: null,
+    householdId: 1,
     createdAt: daysAgoIso(0),
     updatedAt: daysAgoIso(0),
     ...overrides,

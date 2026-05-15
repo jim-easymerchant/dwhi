@@ -4,6 +4,43 @@ export type ItemSource = 'manual' | 'photo' | 'receipt' | 'barcode';
 
 export type ItemLookupSource = 'barcode' | 'ai' | 'mock' | 'manual';
 
+// ---------------------------------------------------------------------------
+// Household scope (local-first today; sync-ready tomorrow)
+// ---------------------------------------------------------------------------
+
+export type HouseholdRole = 'owner' | 'member';
+
+export interface Household {
+  id: number;
+  name: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface HouseholdMember {
+  id: number;
+  householdId: number;
+  displayName: string;
+  role: HouseholdRole;
+  localDeviceId: number | null;
+  createdAt: string;
+}
+
+export interface Device {
+  id: number;
+  householdId: number;
+  deviceName: string;
+  deviceUuid: string;
+  createdAt: string;
+  lastSeenAt: string;
+}
+
+export interface ActiveHouseholdContext {
+  household: Household;
+  member: HouseholdMember;
+  device: Device;
+}
+
 export interface Item {
   id: number;
   manufacturer: string | null;
@@ -17,9 +54,13 @@ export interface Item {
   rawLookupJson: string | null;
   createdAt: string;
   updatedAt: string;
+  householdId: number | null;
 }
 
-export type NewItem = Omit<Item, 'id' | 'createdAt' | 'updatedAt'>;
+// Household scope is set by the repository from the active context, not the
+// caller — keep it out of the input shape so business code never thinks
+// about it.
+export type NewItem = Omit<Item, 'id' | 'createdAt' | 'updatedAt' | 'householdId'>;
 
 export interface InventoryEvent {
   id: number;

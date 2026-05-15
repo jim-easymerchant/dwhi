@@ -1,4 +1,9 @@
 import { getDb, nowIso } from '@/db/database';
+import {
+  getActiveDeviceId,
+  getActiveHouseholdId,
+  getActiveMemberId,
+} from '@/services/householdContext';
 import type { InventoryEvent, NewInventoryEvent } from '@/types/models';
 
 interface EventRow {
@@ -30,8 +35,9 @@ export async function recordEvent(input: NewInventoryEvent): Promise<InventoryEv
   const now = nowIso();
   const result = await db.runAsync(
     `INSERT INTO inventory_events
-       (item_id, direction, quantity, image_uri, raw_ai_json, source, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?);`,
+       (item_id, direction, quantity, image_uri, raw_ai_json, source, created_at,
+        household_id, created_by_member_id, created_by_device_id)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
     input.itemId,
     input.direction,
     input.quantity,
@@ -39,6 +45,9 @@ export async function recordEvent(input: NewInventoryEvent): Promise<InventoryEv
     input.rawAiJson,
     input.source,
     now,
+    getActiveHouseholdId(),
+    getActiveMemberId(),
+    getActiveDeviceId(),
   );
   return { ...input, id: result.lastInsertRowId, createdAt: now };
 }
@@ -50,9 +59,10 @@ export async function listEventsForItem(
   const db = await getDb();
   const rows = await db.getAllAsync<EventRow>(
     `SELECT * FROM inventory_events
-     WHERE item_id = ?
+     WHERE household_id = ? AND item_id = ?
      ORDER BY created_at DESC
      LIMIT ?;`,
+    getActiveHouseholdId(),
     itemId,
     limit,
   );
@@ -81,7 +91,8 @@ export async function getEstimatedBalance(itemId: number): Promise<EstimatedBala
        MAX(CASE WHEN direction = 'IN'  THEN created_at END) AS last_in_at,
        MAX(CASE WHEN direction = 'OUT' THEN created_at END) AS last_out_at
      FROM inventory_events
-     WHERE item_id = ?;`,
+     WHERE household_id = ? AND item_id = ?;`,
+    getActiveHouseholdId(),
     itemId,
   );
   const totalIn = row?.total_in ?? 0;
@@ -98,7 +109,11 @@ export async function getEstimatedBalance(itemId: number): Promise<EstimatedBala
 export async function listRecentEvents(limit = 20): Promise<InventoryEvent[]> {
   const db = await getDb();
   const rows = await db.getAllAsync<EventRow>(
-    'SELECT * FROM inventory_events ORDER BY created_at DESC LIMIT ?;',
+    `SELECT * FROM inventory_events
+     WHERE household_id = ?
+     ORDER BY created_at DESC
+     LIMIT ?;`,
+    getActiveHouseholdId(),
     limit,
   );
   return rows.map(rowToEvent);

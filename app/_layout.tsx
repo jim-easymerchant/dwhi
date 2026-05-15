@@ -7,6 +7,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { initDatabase } from '@/db/database';
 import { seedIfEmpty } from '@/seed/seedData';
+import { bootstrapHousehold } from '@/services/householdBootstrap';
 import { colors } from '@/theme/colors';
 
 export default function RootLayout() {
@@ -17,6 +18,10 @@ export default function RootLayout() {
   const bootstrap = useCallback(async () => {
     try {
       await initDatabase();
+      // Ensure local household/member/device exist + publish them to the
+      // active scope so every repo write/read knows where it belongs.
+      // Backfills any pre-existing rows from earlier installs.
+      await bootstrapHousehold();
       await seedIfEmpty();
       setReady(true);
     } catch (e) {

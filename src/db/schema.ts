@@ -1,4 +1,42 @@
 export const SCHEMA_STATEMENTS: string[] = [
+  // ---------------------------------------------------------------------------
+  // Multi-household scoping (local-first today; ready for sync later).
+  // Every row in every domain table carries an integer household_id so a
+  // future cloud-sync layer can fan rows out by household without touching
+  // UI code. Today the bootstrap creates a single "My Household" and
+  // backfills all rows to it.
+  // ---------------------------------------------------------------------------
+  `CREATE TABLE IF NOT EXISTS households (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );`,
+  `CREATE TABLE IF NOT EXISTS household_members (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    household_id INTEGER NOT NULL,
+    display_name TEXT NOT NULL,
+    role TEXT NOT NULL CHECK(role IN ('owner','member')),
+    local_device_id INTEGER,
+    created_at TEXT NOT NULL,
+    FOREIGN KEY(household_id) REFERENCES households(id)
+  );`,
+  `CREATE INDEX IF NOT EXISTS idx_household_members_household_id ON household_members(household_id);`,
+  `CREATE TABLE IF NOT EXISTS devices (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    household_id INTEGER NOT NULL,
+    device_name TEXT NOT NULL,
+    device_uuid TEXT NOT NULL UNIQUE,
+    created_at TEXT NOT NULL,
+    last_seen_at TEXT NOT NULL,
+    FOREIGN KEY(household_id) REFERENCES households(id)
+  );`,
+  `CREATE INDEX IF NOT EXISTS idx_devices_household_id ON devices(household_id);`,
+
+  // ---------------------------------------------------------------------------
+  // Domain tables — household scope columns appended after the original
+  // columns so positional INSERTs in older code paths stay readable.
+  // ---------------------------------------------------------------------------
   `CREATE TABLE IF NOT EXISTS items (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     manufacturer TEXT,
@@ -11,11 +49,13 @@ export const SCHEMA_STATEMENTS: string[] = [
     source TEXT,
     raw_lookup_json TEXT,
     created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL
+    updated_at TEXT NOT NULL,
+    household_id INTEGER
   );`,
   `CREATE INDEX IF NOT EXISTS idx_items_canonical_key ON items(canonical_key);`,
   `CREATE INDEX IF NOT EXISTS idx_items_name ON items(name);`,
   `CREATE INDEX IF NOT EXISTS idx_items_barcode ON items(barcode);`,
+  `CREATE INDEX IF NOT EXISTS idx_items_household_id ON items(household_id);`,
   `CREATE TABLE IF NOT EXISTS inventory_events (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     item_id INTEGER NOT NULL,
@@ -25,10 +65,14 @@ export const SCHEMA_STATEMENTS: string[] = [
     raw_ai_json TEXT,
     source TEXT NOT NULL,
     created_at TEXT NOT NULL,
+    household_id INTEGER,
+    created_by_member_id INTEGER,
+    created_by_device_id INTEGER,
     FOREIGN KEY(item_id) REFERENCES items(id)
   );`,
   `CREATE INDEX IF NOT EXISTS idx_inventory_events_item_id ON inventory_events(item_id);`,
   `CREATE INDEX IF NOT EXISTS idx_inventory_events_created_at ON inventory_events(created_at);`,
+  `CREATE INDEX IF NOT EXISTS idx_inventory_events_household_id ON inventory_events(household_id);`,
   `CREATE TABLE IF NOT EXISTS receipts (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     store_name TEXT,
@@ -37,8 +81,12 @@ export const SCHEMA_STATEMENTS: string[] = [
     image_uri TEXT,
     raw_ai_json TEXT,
     parse_source TEXT,
-    created_at TEXT NOT NULL
+    created_at TEXT NOT NULL,
+    household_id INTEGER,
+    created_by_member_id INTEGER,
+    created_by_device_id INTEGER
   );`,
+  `CREATE INDEX IF NOT EXISTS idx_receipts_household_id ON receipts(household_id);`,
   `CREATE TABLE IF NOT EXISTS receipt_items (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     receipt_id INTEGER NOT NULL,
@@ -46,6 +94,7 @@ export const SCHEMA_STATEMENTS: string[] = [
     raw_name TEXT,
     quantity INTEGER,
     estimated_category TEXT,
+    household_id INTEGER,
     FOREIGN KEY(receipt_id) REFERENCES receipts(id)
   );`,
   `CREATE INDEX IF NOT EXISTS idx_receipt_items_receipt_id ON receipt_items(receipt_id);`,
@@ -53,17 +102,25 @@ export const SCHEMA_STATEMENTS: string[] = [
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     query_text TEXT NOT NULL,
     normalized_term TEXT NOT NULL,
-    created_at TEXT NOT NULL
+    created_at TEXT NOT NULL,
+    household_id INTEGER,
+    created_by_member_id INTEGER,
+    created_by_device_id INTEGER
   );`,
   `CREATE INDEX IF NOT EXISTS idx_ask_history_normalized_term ON ask_history(normalized_term);`,
   `CREATE INDEX IF NOT EXISTS idx_ask_history_created_at ON ask_history(created_at);`,
+  `CREATE INDEX IF NOT EXISTS idx_ask_history_household_id ON ask_history(household_id);`,
   `CREATE TABLE IF NOT EXISTS ask_feedback (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     normalized_term TEXT NOT NULL,
     answer_level TEXT NOT NULL,
     user_feedback TEXT NOT NULL CHECK(user_feedback IN ('have', 'dont', 'unsure')),
-    created_at TEXT NOT NULL
+    created_at TEXT NOT NULL,
+    household_id INTEGER,
+    created_by_member_id INTEGER,
+    created_by_device_id INTEGER
   );`,
   `CREATE INDEX IF NOT EXISTS idx_ask_feedback_normalized_term ON ask_feedback(normalized_term);`,
   `CREATE INDEX IF NOT EXISTS idx_ask_feedback_created_at ON ask_feedback(created_at);`,
+  `CREATE INDEX IF NOT EXISTS idx_ask_feedback_household_id ON ask_feedback(household_id);`,
 ];

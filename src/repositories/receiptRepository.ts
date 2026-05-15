@@ -1,4 +1,9 @@
 import { getDb, nowIso } from '@/db/database';
+import {
+  getActiveDeviceId,
+  getActiveHouseholdId,
+  getActiveMemberId,
+} from '@/services/householdContext';
 import type { Receipt, ReceiptItem } from '@/types/models';
 
 interface ReceiptRow {
@@ -57,28 +62,37 @@ export interface CreateReceiptInput {
 export async function createReceipt(input: CreateReceiptInput): Promise<Receipt> {
   const db = await getDb();
   const now = nowIso();
+  const householdId = getActiveHouseholdId();
+  const memberId = getActiveMemberId();
+  const deviceId = getActiveDeviceId();
   let receiptId = 0;
   await db.withTransactionAsync(async () => {
     const result = await db.runAsync(
-      `INSERT INTO receipts (store_name, purchased_at, total, image_uri, created_at)
-       VALUES (?, ?, ?, ?, ?);`,
+      `INSERT INTO receipts
+         (store_name, purchased_at, total, image_uri, created_at,
+          household_id, created_by_member_id, created_by_device_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?);`,
       input.storeName,
       input.purchasedAt,
       input.total,
       input.imageUri,
       now,
+      householdId,
+      memberId,
+      deviceId,
     );
     receiptId = result.lastInsertRowId;
     for (const it of input.items) {
       await db.runAsync(
         `INSERT INTO receipt_items
-           (receipt_id, canonical_name, raw_name, quantity, estimated_category)
-         VALUES (?, ?, ?, ?, ?);`,
+           (receipt_id, canonical_name, raw_name, quantity, estimated_category, household_id)
+         VALUES (?, ?, ?, ?, ?, ?);`,
         receiptId,
         it.canonicalName,
         it.rawName,
         it.quantity,
         it.estimatedCategory,
+        householdId,
       );
     }
   });
@@ -95,7 +109,8 @@ export async function createReceipt(input: CreateReceiptInput): Promise<Receipt>
 export async function listReceipts(limit = 50): Promise<Receipt[]> {
   const db = await getDb();
   const rows = await db.getAllAsync<ReceiptRow>(
-    'SELECT * FROM receipts ORDER BY created_at DESC LIMIT ?;',
+    'SELECT * FROM receipts WHERE household_id = ? ORDER BY created_at DESC LIMIT ?;',
+    getActiveHouseholdId(),
     limit,
   );
   return rows.map(rowToReceipt);
@@ -104,7 +119,10 @@ export async function listReceipts(limit = 50): Promise<Receipt[]> {
 export async function listReceiptItems(receiptId: number): Promise<ReceiptItem[]> {
   const db = await getDb();
   const rows = await db.getAllAsync<ReceiptItemRow>(
-    'SELECT * FROM receipt_items WHERE receipt_id = ? ORDER BY id ASC;',
+    `SELECT * FROM receipt_items
+      WHERE household_id = ? AND receipt_id = ?
+      ORDER BY id ASC;`,
+    getActiveHouseholdId(),
     receiptId,
   );
   return rows.map(rowToReceiptItem);
@@ -124,11 +142,13 @@ export async function findMostRecentReceiptForItem(
     `SELECT r.*, COALESCE(ri.canonical_name, ri.raw_name) AS matched_name
        FROM receipts r
        JOIN receipt_items ri ON ri.receipt_id = r.id
-      WHERE LOWER(COALESCE(ri.canonical_name, '')) LIKE ?
-         OR LOWER(COALESCE(ri.raw_name, '')) LIKE ?
-         OR LOWER(COALESCE(ri.estimated_category, '')) LIKE ?
+      WHERE r.household_id = ?
+        AND (LOWER(COALESCE(ri.canonical_name, '')) LIKE ?
+             OR LOWER(COALESCE(ri.raw_name, '')) LIKE ?
+             OR LOWER(COALESCE(ri.estimated_category, '')) LIKE ?)
       ORDER BY r.purchased_at DESC, r.created_at DESC
       LIMIT 1;`,
+    getActiveHouseholdId(),
     like,
     like,
     like,

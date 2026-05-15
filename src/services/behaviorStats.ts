@@ -13,6 +13,7 @@
 
 import { getDb } from '@/db/database';
 import { summaryForTerm, type AskSummaryForTerm } from '@/repositories/askHistoryRepository';
+import { getActiveHouseholdId } from './householdContext';
 
 const DAY_MS = 86_400_000;
 
@@ -53,8 +54,9 @@ export async function getItemBehaviorStats(
   const rows = await db.getAllAsync<EventRow>(
     `SELECT item_id, direction, created_at
        FROM inventory_events
-      WHERE item_id = ?
+      WHERE household_id = ? AND item_id = ?
       ORDER BY created_at ASC;`,
+    getActiveHouseholdId(),
     itemId,
   );
 
@@ -85,8 +87,9 @@ export async function getCategoryBehaviorStats(
     `SELECT e.item_id AS item_id, e.direction AS direction, e.created_at AS created_at
        FROM inventory_events e
        JOIN items i ON i.id = e.item_id
-      WHERE LOWER(i.category) = LOWER(?)
+      WHERE e.household_id = ? AND LOWER(i.category) = LOWER(?)
       ORDER BY e.item_id ASC, e.created_at ASC;`,
+    getActiveHouseholdId(),
     trimmed,
   );
   const { burn } = analyseEvents(rows);
@@ -100,11 +103,12 @@ export async function getCategoryBehaviorStats(
  */
 export async function countLearnedPatterns(): Promise<number> {
   const db = await getDb();
+  const householdId = getActiveHouseholdId();
   const row = await db.getFirstAsync<{ c: number }>(
     `SELECT COUNT(*) AS c FROM (
        SELECT item_id
          FROM inventory_events
-        WHERE direction = 'IN'
+        WHERE household_id = ? AND direction = 'IN'
         GROUP BY item_id
        HAVING COUNT(*) >= 2
        UNION
@@ -113,8 +117,11 @@ export async function countLearnedPatterns(): Promise<number> {
          JOIN inventory_events o ON o.item_id = i.item_id
                                   AND o.direction = 'OUT'
                                   AND o.created_at > i.created_at
-        WHERE i.direction = 'IN'
+                                  AND o.household_id = i.household_id
+        WHERE i.household_id = ? AND i.direction = 'IN'
      );`,
+    householdId,
+    householdId,
   );
   return row?.c ?? 0;
 }
