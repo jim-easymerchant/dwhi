@@ -42,6 +42,16 @@
           "photosPermission": "Pick photos of items and receipts from your library.",
           "cameraPermission": "Take photos of items and receipts to remember what you have."
         }
+      ],
+      [
+        "expo-speech-recognition",
+        {
+          "microphonePermission": "Allow Do We Have It? to use your microphone for the push-to-talk Ask command.",
+          "speechRecognitionPermission": "Allow Do We Have It? to use speech recognition for the push-to-talk Ask command.",
+          "androidSpeechServicePackages": [
+            "com.google.android.googlequicksearchbox"
+          ]
+        }
       ]
     ],
     "experiments": {

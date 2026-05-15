@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -23,6 +23,10 @@ import {
 import { parseVoiceCommand } from '@/services/voice/voiceIntentParser';
 import { chooseAskDispatch } from '@/services/voice/askDispatch';
 import { speechService } from '@/services/voice/speechService';
+import type {
+  SpeechError,
+  SpeechRecognitionSession,
+} from '@/services/voice/voiceTypes';
 import { useCaptureStore } from '@/services/captureStore';
 import { colors, spacing, typography } from '@/theme/colors';
 
@@ -74,14 +78,27 @@ export default function AskScreen() {
   const [answer, setAnswer] = useState<ConfidenceResult | null>(null);
   const [showSignals, setShowSignals] = useState(false);
   const [busy, setBusy] = useState(false);
-  /** Brief hint shown when the mic is tapped (v1 = text fallback). */
+  /** Brief hint shown when the mic is tapped on the manual fallback. */
   const [micHintVisible, setMicHintVisible] = useState(false);
+  /** Push-to-talk lifecycle. */
+  const [micState, setMicState] = useState<'idle' | 'listening' | 'error'>('idle');
+  const [micError, setMicError] = useState<string | null>(null);
+  const sessionRef = useRef<SpeechRecognitionSession | null>(null);
   /**
    * Tracks which feedback option was tapped for the current answer. Reset
    * every time a new answer arrives. Keeps the flow one-tap: once you've
    * said "we have it", we don't keep asking.
    */
   const [submittedFeedback, setSubmittedFeedback] = useState<AskFeedbackKind | null>(null);
+
+  // Clean up any in-flight recognition session when the screen unmounts so
+  // a native module never holds a stale callback.
+  useEffect(() => {
+    return () => {
+      sessionRef.current?.cancel();
+      sessionRef.current = null;
+    };
+  }, []);
 
   /**
    * Single entry point for both typed questions and "voice" transcripts.
@@ -127,12 +144,94 @@ export default function AskScreen() {
     }
   };
 
+  const errorMessageFor = (error: SpeechError): string => {
+    switch (error.code) {
+      case 'not-allowed':
+      case 'service-not-allowed':
+        return 'Microphone permission denied — you can still type your command.';
+      case 'no-speech':
+        return "Didn't catch anything — try again or type it.";
+      case 'audio-capture':
+        return "Couldn't access the microphone. Try typing instead.";
+      case 'network':
+        return 'Speech service network error. Try again or type it.';
+      case 'busy':
+        return 'Speech recognizer is busy. Try again in a moment.';
+      case 'language-not-supported':
+        return 'Your device speech service does not support this language.';
+      case 'aborted':
+        return 'Recording stopped.';
+      case 'unsupported':
+        return 'Speech recognition is not available on this device.';
+      default:
+        return error.message || 'Speech recognition failed — type your command instead.';
+    }
+  };
+
+  const stopSession = () => {
+    sessionRef.current?.stop();
+  };
+
+  const startListening = async () => {
+    if (speechService.kind !== 'native') {
+      // Manual fallback: surface a hint + focus the input. No audio path.
+      setMicHintVisible(true);
+      inputRef.current?.focus();
+      return;
+    }
+
+    setMicError(null);
+
+    const granted = await speechService.requestPermission();
+    if (!granted) {
+      setMicState('error');
+      setMicError('Microphone permission denied — you can still type your command.');
+      return;
+    }
+
+    try {
+      const session = await speechService.start({
+        onPartial: (transcript: string) => {
+          // Live-update the visible input but don't submit until final.
+          setQuery(transcript);
+        },
+        onFinal: (transcript: string) => {
+          setQuery(transcript);
+          // Auto-submit after a final transcript so the user doesn't have to
+          // tap Ask separately. The submit flow handles routing to ASK vs
+          // IN/OUT identically to the typed path.
+          void submit(transcript);
+        },
+        onError: (error: SpeechError) => {
+          setMicState('error');
+          setMicError(errorMessageFor(error));
+        },
+        onEnd: () => {
+          sessionRef.current = null;
+          setMicState(prev => (prev === 'error' ? prev : 'idle'));
+        },
+      });
+      sessionRef.current = session;
+      setMicState('listening');
+    } catch (e) {
+      setMicState('error');
+      setMicError(
+        e instanceof Error ? e.message : 'Could not start speech recognition.',
+      );
+    }
+  };
+
   const onMicPress = () => {
-    // v1: no live recogniser yet — make the mic a real affordance by
-    // focusing the question field and showing a one-line hint about the
-    // current speech mode.
-    setMicHintVisible(true);
-    inputRef.current?.focus();
+    if (micState === 'listening') {
+      stopSession();
+      return;
+    }
+    if (micState === 'error') {
+      setMicState('idle');
+      setMicError(null);
+      return;
+    }
+    void startListening();
   };
 
   const submitFeedback = async (kind: AskFeedbackKind) => {
@@ -176,17 +275,27 @@ export default function AskScreen() {
             <Pressable
               onPress={onMicPress}
               accessibilityRole="button"
-              accessibilityLabel="Voice"
+              accessibilityLabel={
+                micState === 'listening' ? 'Stop listening' : 'Voice'
+              }
               style={({ pressed }) => [
                 styles.micButton,
+                micState === 'listening' && styles.micButtonListening,
+                micState === 'error' && styles.micButtonError,
                 pressed && { opacity: 0.7 },
               ]}
             >
-              <Text style={styles.micGlyph}>🎙</Text>
+              <Text style={styles.micGlyph}>
+                {micState === 'listening' ? '⏹' : '🎙'}
+              </Text>
             </Pressable>
           </View>
 
-          {micHintVisible ? (
+          {micState === 'listening' ? (
+            <Text style={styles.micListening}>Listening… tap the square to stop.</Text>
+          ) : micState === 'error' && micError ? (
+            <Text style={styles.micError}>{micError}</Text>
+          ) : micHintVisible ? (
             <Text style={styles.micHint}>{speechService.describeMode()}</Text>
           ) : null}
 
@@ -324,12 +433,29 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  micButtonListening: {
+    backgroundColor: '#3A1C1C',
+    borderColor: colors.danger,
+  },
+  micButtonError: {
+    borderColor: colors.warn,
+  },
   micGlyph: {
     fontSize: 22,
   },
   micHint: {
     ...typography.caption,
     color: colors.textMuted,
+    paddingHorizontal: spacing.xs,
+  },
+  micListening: {
+    ...typography.caption,
+    color: colors.danger,
+    paddingHorizontal: spacing.xs,
+  },
+  micError: {
+    ...typography.caption,
+    color: colors.warn,
     paddingHorizontal: spacing.xs,
   },
   suggestionsRow: {

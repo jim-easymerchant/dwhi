@@ -3,5 +3,15 @@
  * `@/services/voice/`. This module stays so older imports keep compiling.
  */
 
-export { speechService, manualEntryStub } from './voice/speechService';
-export type { SpeechService } from './voice/voiceTypes';
+export {
+  speechService,
+  manualFallbackSpeechService,
+  nativeSpeechService,
+} from './voice/speechService';
+export type {
+  SpeechService,
+  SpeechServiceKind,
+  SpeechError,
+  SpeechRecognitionSession,
+  SpeechRecognitionCallbacks,
+} from './voice/voiceTypes';

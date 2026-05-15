@@ -34,6 +34,7 @@ export interface Diagnostics {
   voice: {
     available: boolean;
     mode: string;
+    kind: 'native' | 'manual';
   };
 }
 
@@ -95,6 +96,7 @@ export async function readDiagnostics(): Promise<Diagnostics> {
     voice: {
       available: speechService.isAvailable(),
       mode: speechService.describeMode(),
+      kind: speechService.kind,
     },
   };
 }

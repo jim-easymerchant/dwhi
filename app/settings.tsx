@@ -91,7 +91,13 @@ export default function SettingsScreen() {
             <Card>
               <Text style={styles.cardHeading}>Voice command</Text>
               <Row
-                label="Speech available"
+                label="Mode"
+                value={diag.voice.kind === 'native' ? 'Native' : 'Manual fallback'}
+                tone={diag.voice.kind === 'native' ? 'good' : 'muted'}
+                mono
+              />
+              <Row
+                label="Recognition available"
                 value={diag.voice.available ? 'Yes' : 'No'}
                 tone={diag.voice.available ? 'good' : 'muted'}
               />

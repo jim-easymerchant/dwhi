@@ -180,26 +180,57 @@ The parser:
 
 ### Speech-to-text path
 
-The intent pipeline ships behind a clean `SpeechService` interface. The
-current implementation is a **manual text fallback**: tapping the 🎙
-button on Ask focuses the same input field that handles typed questions
-and shows a one-line note about the active speech mode. The parser
-handles the rest exactly as it would for a real transcript.
+The intent pipeline runs behind a `SpeechService` interface with two
+implementations selected at app start:
 
-To swap in real on-device speech recognition (e.g. via
-`@jamsch/expo-speech-recognition`), implement the same `SpeechService`
-interface in `src/services/voice/speechService.ts`. The rest of the
-pipeline (normalizer, parser, dispatcher, confirm-item routing) runs
-unchanged.
+- **`nativeSpeechService`** — wraps the
+  [`expo-speech-recognition`](https://github.com/jamsch/expo-speech-recognition)
+  module (added as a dep at `^1.1.1`). Push-to-talk only; never
+  always-on. The native module is loaded **lazily via `require()`** so
+  Jest, Expo Go, and any environment without the native binary
+  silently fall through.
+- **`manualFallbackSpeechService`** — used when the native module
+  doesn't load. The 🎙 button focuses the input field and shows a one-
+  line hint; the rest of the pipeline runs identically.
+
+The Ask screen displays the current state inline:
+
+```
+mic button → tap → (request permission) → listening → final transcript
+                       │                                  │
+                       └─→ permission denied             └─→ auto-submit
+                            error line, type instead          (parser → dispatch)
+```
+
+A second tap during listening stops the session and surfaces the final
+transcript. The error line covers `not-allowed`, `no-speech`,
+`audio-capture`, `network`, `busy`, `language-not-supported`, and a
+generic fallback — all map to short, user-readable copy.
+
+### Permissions
+
+The `expo-speech-recognition` config plugin (set in `app.json`) requests:
+
+- **Android**: `RECORD_AUDIO` + package-visibility filtering for the
+  Google Quick Search Box (`com.google.android.googlequicksearchbox`)
+  so the recognizer can find an installed service. The runtime
+  permission prompt fires on first mic tap.
+- **iOS** (future-ready, not built today): `NSMicrophoneUsageDescription`
+  and `NSSpeechRecognitionUsageDescription` are set via the plugin so
+  an iOS build picks them up automatically.
 
 ### Privacy
 
 - The manual-text fallback never sends anything off-device.
-- A future on-device recognizer would, by default, use the platform's
-  built-in engine (iOS Speech framework / Android `SpeechRecognizer`).
-  Some Android OEM builds route through Google's servers; this would be
-  documented at the moment the real recognizer ships and surfaced in the
-  Settings → Voice command card.
+- The native recognizer uses the platform's built-in speech service.
+  On most Android devices that is Google's recognizer, which may
+  process audio in the cloud depending on the device, OS version, and
+  whether on-device recognition is available; iOS uses the Speech
+  framework, which prefers on-device. **The app itself stores no
+  audio** — the transcript is consumed in-memory by the parser, then
+  the question / IN / OUT command flows through the same local SQLite
+  pipeline as every typed input. The Settings → Voice card shows
+  whether the live mode is native or manual.
 
 ## Building an Android APK (GitHub Actions, direct Gradle)
 
