@@ -24,6 +24,7 @@ function ctx(
       },
     },
     categoryBehavior: null,
+    feedback: null,
     now: FIXED_NOW,
     ...overrides,
   };

@@ -1,5 +1,6 @@
 import type { Item } from '@/types/models';
 import type { ItemBehaviorStats, CategoryBehaviorStats } from '@/services/behaviorStats';
+import type { FeedbackSummaryForTerm } from '@/repositories/askFeedbackRepository';
 
 export type SignalPolarity = 'positive' | 'negative' | 'neutral';
 
@@ -40,6 +41,11 @@ export interface ConfidenceResult {
   /** Every signal that fired, in emission order. */
   signals: ConfidenceSignal[];
   matchedItem?: MatchedItem;
+  /**
+   * Cleaned noun phrase the engine matched on. Exposed so the Ask screen
+   * can record correction feedback against the same bucket.
+   */
+  normalizedTerm: string;
 }
 
 /**
@@ -67,6 +73,8 @@ export interface SignalContext {
   itemBehavior: ItemBehaviorStats | null;
   /** Category-wide burn time, used as fallback when per-item data is thin. */
   categoryBehavior: CategoryBehaviorStats | null;
+  /** Recent user corrections ("we have it" / "we don't" / "not sure"). */
+  feedback: FeedbackSummaryForTerm | null;
   /** Wall clock at engine entry, ms since epoch. Pinned for determinism. */
   now: number;
 }

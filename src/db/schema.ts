@@ -57,4 +57,13 @@ export const SCHEMA_STATEMENTS: string[] = [
   );`,
   `CREATE INDEX IF NOT EXISTS idx_ask_history_normalized_term ON ask_history(normalized_term);`,
   `CREATE INDEX IF NOT EXISTS idx_ask_history_created_at ON ask_history(created_at);`,
+  `CREATE TABLE IF NOT EXISTS ask_feedback (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    normalized_term TEXT NOT NULL,
+    answer_level TEXT NOT NULL,
+    user_feedback TEXT NOT NULL CHECK(user_feedback IN ('have', 'dont', 'unsure')),
+    created_at TEXT NOT NULL
+  );`,
+  `CREATE INDEX IF NOT EXISTS idx_ask_feedback_normalized_term ON ask_feedback(normalized_term);`,
+  `CREATE INDEX IF NOT EXISTS idx_ask_feedback_created_at ON ask_feedback(created_at);`,
 ];

@@ -50,6 +50,7 @@ function ctx(overrides: Partial<SignalContext> = {}): SignalContext {
     matchedReceipt: null,
     itemBehavior: null,
     categoryBehavior: null,
+    feedback: null,
     now: FIXED_NOW,
     ...overrides,
   };

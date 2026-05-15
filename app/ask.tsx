@@ -15,6 +15,10 @@ import { TextField } from '@/components/TextField';
 import { BigButton } from '@/components/BigButton';
 import { Card } from '@/components/Card';
 import { answerQuestion, type ConfidenceResult, type ConfidenceLevel } from '@/services/confidence/confidenceEngine';
+import {
+  recordFeedback,
+  type AskFeedbackKind,
+} from '@/repositories/askFeedbackRepository';
 import { colors, spacing, typography } from '@/theme/colors';
 
 const SUGGESTIONS = [
@@ -32,12 +36,42 @@ const CONFIDENCE_COLOR: Record<ConfidenceLevel, string> = {
   Unknown: colors.textSecondary,
 };
 
+interface FeedbackChipProps {
+  label: string;
+  kind: AskFeedbackKind;
+  tone: string;
+  onPress: () => void;
+}
+
+function FeedbackChip({ label, tone, onPress }: FeedbackChipProps) {
+  return (
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.feedbackChip,
+        { borderColor: tone },
+        pressed && { opacity: 0.6 },
+      ]}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+    >
+      <Text style={[styles.feedbackChipText, { color: tone }]}>{label}</Text>
+    </Pressable>
+  );
+}
+
 export default function AskScreen() {
   const router = useRouter();
   const [query, setQuery] = useState('');
   const [answer, setAnswer] = useState<ConfidenceResult | null>(null);
   const [showSignals, setShowSignals] = useState(false);
   const [busy, setBusy] = useState(false);
+  /**
+   * Tracks which feedback option was tapped for the current answer. Reset
+   * every time a new answer arrives. Keeps the flow one-tap: once you've
+   * said "we have it", we don't keep asking.
+   */
+  const [submittedFeedback, setSubmittedFeedback] = useState<AskFeedbackKind | null>(null);
 
   const ask = async (q: string) => {
     const trimmed = q.trim();
@@ -45,11 +79,25 @@ export default function AskScreen() {
     setBusy(true);
     setAnswer(null);
     setShowSignals(false);
+    setSubmittedFeedback(null);
     try {
       const result = await answerQuestion(trimmed);
       setAnswer(result);
     } finally {
       setBusy(false);
+    }
+  };
+
+  const submitFeedback = async (kind: AskFeedbackKind) => {
+    if (!answer || submittedFeedback) return;
+    // Optimistic — show the confirmation immediately, write asynchronously.
+    setSubmittedFeedback(kind);
+    try {
+      await recordFeedback(answer.normalizedTerm, answer.level, kind);
+    } catch (e) {
+      console.warn('[ask] recordFeedback failed:', e);
+      // Roll back so the user can try again.
+      setSubmittedFeedback(null);
     }
   };
 
@@ -110,6 +158,39 @@ export default function AskScreen() {
                 {answer.level}
               </Text>
               <Text style={styles.answerText}>{answer.answer}</Text>
+
+              {answer.level !== 'Unknown' ? (
+                submittedFeedback ? (
+                  <Text style={styles.feedbackThanks}>
+                    Thanks — I'll remember that.
+                  </Text>
+                ) : (
+                  <View style={styles.feedbackWrap}>
+                    <Text style={styles.feedbackPrompt}>Was this right?</Text>
+                    <View style={styles.feedbackRow}>
+                      <FeedbackChip
+                        label="We have it"
+                        kind="have"
+                        tone={colors.positive}
+                        onPress={() => void submitFeedback('have')}
+                      />
+                      <FeedbackChip
+                        label="We don't"
+                        kind="dont"
+                        tone={colors.danger}
+                        onPress={() => void submitFeedback('dont')}
+                      />
+                      <FeedbackChip
+                        label="Not sure"
+                        kind="unsure"
+                        tone={colors.textSecondary}
+                        onPress={() => void submitFeedback('unsure')}
+                      />
+                    </View>
+                  </View>
+                )
+              ) : null}
+
               {__DEV__ && answer.signals.length > 0 ? (
                 <View style={styles.signalsWrap}>
                   <Pressable onPress={() => setShowSignals(v => !v)} style={styles.signalsToggle}>
@@ -192,6 +273,35 @@ const styles = StyleSheet.create({
   answerText: {
     ...typography.body,
     color: colors.textPrimary,
+  },
+  feedbackWrap: {
+    marginTop: spacing.sm,
+    gap: spacing.xs,
+  },
+  feedbackPrompt: {
+    ...typography.caption,
+    color: colors.textMuted,
+  },
+  feedbackRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.xs,
+  },
+  feedbackChip: {
+    borderWidth: 1,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 8,
+    borderRadius: 999,
+    backgroundColor: 'transparent',
+  },
+  feedbackChipText: {
+    ...typography.label,
+    fontWeight: '600',
+  },
+  feedbackThanks: {
+    ...typography.caption,
+    color: colors.textMuted,
+    marginTop: spacing.xs,
   },
   signalsWrap: {
     marginTop: spacing.sm,

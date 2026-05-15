@@ -19,6 +19,7 @@
 import { searchByName } from '@/repositories/itemRepository';
 import { findMostRecentReceiptForItem } from '@/repositories/receiptRepository';
 import { recordAsk } from '@/repositories/askHistoryRepository';
+import { summaryForTerm as feedbackSummaryForTerm } from '@/repositories/askFeedbackRepository';
 import {
   getItemBehaviorStats,
   getCategoryBehaviorStats,
@@ -32,6 +33,7 @@ import { barcodeSignals } from './signalGenerators/barcodeSignals';
 import { temporalDecaySignals } from './signalGenerators/temporalDecaySignals';
 import { askHistorySignals } from './signalGenerators/askHistorySignals';
 import { behaviorSignals } from './signalGenerators/behaviorSignals';
+import { feedbackSignals } from './signalGenerators/feedbackSignals';
 
 const GENERATORS: SignalGenerator[] = [
   receiptSignals,
@@ -40,6 +42,7 @@ const GENERATORS: SignalGenerator[] = [
   temporalDecaySignals,
   askHistorySignals,
   behaviorSignals,
+  feedbackSignals,
 ];
 
 /**
@@ -82,8 +85,9 @@ export async function answerQuestion(rawQuery: string): Promise<ConfidenceResult
   ]);
   const matchedItem = items[0] ?? null;
 
-  // Hydrate behavior stats once; signal generators read from context only.
-  const [itemBehavior, categoryBehavior] = await Promise.all([
+  // Hydrate behavior stats + feedback once; signal generators read from
+  // context only.
+  const [itemBehavior, categoryBehavior, feedback] = await Promise.all([
     matchedItem
       ? getItemBehaviorStats(matchedItem.id, query, now).catch(err => {
           console.warn('[confidence] getItemBehaviorStats failed:', err);
@@ -96,6 +100,10 @@ export async function answerQuestion(rawQuery: string): Promise<ConfidenceResult
           return null;
         })
       : Promise.resolve(null),
+    feedbackSummaryForTerm(query, now).catch(err => {
+      console.warn('[confidence] feedbackSummaryForTerm failed:', err);
+      return null;
+    }),
   ]);
 
   const ctx: SignalContext = {
@@ -112,6 +120,7 @@ export async function answerQuestion(rawQuery: string): Promise<ConfidenceResult
       : null,
     itemBehavior,
     categoryBehavior,
+    feedback,
     now,
   };
 
@@ -134,6 +143,7 @@ export async function answerQuestion(rawQuery: string): Promise<ConfidenceResult
           category: matchedItem.category ?? undefined,
         }
       : undefined,
+    normalizedTerm: query,
   };
 
   if (__DEV__) {
@@ -150,6 +160,7 @@ function emptyResult(rawQuery: string): ConfidenceResult {
     answer: `I didn't catch a specific item in that question.`,
     signals: [],
     matchedItem: undefined,
+    normalizedTerm: rawQuery.trim(),
   };
 }
 

@@ -17,6 +17,7 @@ const baseCtx: SignalContext = {
   matchedReceipt: null,
   itemBehavior: null,
   categoryBehavior: null,
+  feedback: null,
   now: Date.now(),
 };
 

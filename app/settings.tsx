@@ -76,6 +76,7 @@ export default function SettingsScreen() {
             <Card>
               <Text style={styles.cardHeading}>Learned behavior</Text>
               <Row label="Ask history" value={String(diag.askHistoryCount)} />
+              <Row label="Feedback recorded" value={String(diag.feedbackCount)} tone={diag.feedbackCount > 0 ? 'good' : 'muted'} />
               <Row label="Items with patterns" value={String(diag.learnedPatternsCount)} tone={diag.learnedPatternsCount > 0 ? 'good' : 'muted'} />
             </Card>
 

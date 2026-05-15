@@ -41,6 +41,12 @@ jest.mock('@/repositories/askHistoryRepository', () => ({
   summaryForTerm: jest.fn(),
 }));
 
+jest.mock('@/repositories/askFeedbackRepository', () => ({
+  recordFeedback: jest.fn(),
+  countAll: jest.fn(),
+  summaryForTerm: jest.fn(),
+}));
+
 jest.mock('@/services/behaviorStats', () => ({
   getItemBehaviorStats: jest.fn(),
   getCategoryBehaviorStats: jest.fn(),
@@ -55,6 +61,7 @@ import {
   listEventsForItem,
 } from '@/repositories/inventoryEventRepository';
 import { recordAsk } from '@/repositories/askHistoryRepository';
+import { summaryForTerm as feedbackSummaryForTerm } from '@/repositories/askFeedbackRepository';
 import {
   getItemBehaviorStats,
   getCategoryBehaviorStats,
@@ -75,6 +82,9 @@ const mockItemBehavior = getItemBehaviorStats as jest.MockedFunction<
 >;
 const mockCategoryBehavior = getCategoryBehaviorStats as jest.MockedFunction<
   typeof getCategoryBehaviorStats
+>;
+const mockFeedbackSummary = feedbackSummaryForTerm as jest.MockedFunction<
+  typeof feedbackSummaryForTerm
 >;
 
 // --- helpers -------------------------------------------------------------
@@ -154,6 +164,13 @@ beforeEach(() => {
     ask: { lastAskedAt: null, countLast7d: 0, countTotal: 0 },
   });
   mockCategoryBehavior.mockResolvedValue(null);
+  mockFeedbackSummary.mockResolvedValue({
+    latest: null,
+    latestAt: null,
+    haveCount7d: 0,
+    dontCount7d: 0,
+    unsureCount7d: 0,
+  });
 });
 
 // --- tests ---------------------------------------------------------------
@@ -518,5 +535,124 @@ describe('answerQuestion — behavior + ask history', () => {
     const result = await answerQuestion('Do we have caviar?');
     expect(result.level).toBe('Unknown');
     expect(result.signals).toEqual([]);
+  });
+});
+
+describe('answerQuestion — ask feedback', () => {
+  test('ConfidenceResult exposes the normalized term so the UI can record feedback', async () => {
+    const result = await answerQuestion('Do we have pickles?');
+    expect(result.normalizedTerm).toBe('pickles');
+  });
+
+  test('recent "We have it" feedback nudges score up', async () => {
+    const item = fakeItem({ id: 1, name: 'Organic Milk', category: 'Milk' });
+    mockSearch.mockResolvedValue([item]);
+    mockFindReceipt.mockResolvedValue({
+      receipt: fakeReceipt({ purchasedAt: daysAgoIso(5), createdAt: daysAgoIso(5) }),
+      matchedName: 'Organic Milk',
+    });
+    mockBalance.mockResolvedValue({
+      totalIn: 1,
+      totalOut: 0,
+      net: 1,
+      lastInAt: daysAgoIso(5),
+      lastOutAt: null,
+    });
+    mockList.mockResolvedValue([fakeEvent({ direction: 'IN', createdAt: daysAgoIso(5) })]);
+    mockFeedbackSummary.mockResolvedValue({
+      latest: 'have',
+      latestAt: daysAgoIso(1),
+      haveCount7d: 1,
+      dontCount7d: 0,
+      unsureCount7d: 0,
+    });
+
+    const result = await answerQuestion('Do we have milk?');
+    const sig = result.signals.find(s => s.type === 'feedback.recent-have');
+    expect(sig).toBeDefined();
+    expect(sig?.weight).toBe(6);
+  });
+
+  test('recent "We don\'t" feedback drops score', async () => {
+    const item = fakeItem({ id: 1, name: 'Vlasic Baby Dill Pickles', category: 'Pickles' });
+    mockSearch.mockResolvedValue([item]);
+    mockFindReceipt.mockResolvedValue({
+      receipt: fakeReceipt({ purchasedAt: daysAgoIso(4), createdAt: daysAgoIso(4) }),
+      matchedName: 'Vlasic Baby Dill Pickles',
+    });
+    mockBalance.mockResolvedValue({
+      totalIn: 1,
+      totalOut: 0,
+      net: 1,
+      lastInAt: daysAgoIso(4),
+      lastOutAt: null,
+    });
+    mockList.mockResolvedValue([fakeEvent({ direction: 'IN', createdAt: daysAgoIso(4) })]);
+    mockFeedbackSummary.mockResolvedValue({
+      latest: 'dont',
+      latestAt: daysAgoIso(1),
+      haveCount7d: 0,
+      dontCount7d: 1,
+      unsureCount7d: 0,
+    });
+
+    const result = await answerQuestion('Do we have pickles?');
+    const sig = result.signals.find(s => s.type === 'feedback.recent-dont');
+    expect(sig).toBeDefined();
+    expect(sig?.weight).toBe(-8);
+    // The pickles-4d scenario normally scores ~78 (Probably). With the -8
+    // feedback nudge it lands closer to 70 — the exact level may flip to
+    // Maybe but we only assert the score moved down.
+    expect(result.score).toBeLessThan(75);
+  });
+
+  test('"Not sure" feedback records but does not affect signals', async () => {
+    const item = fakeItem({ id: 1, name: 'Organic Milk', category: 'Milk' });
+    mockSearch.mockResolvedValue([item]);
+    mockFindReceipt.mockResolvedValue({
+      receipt: fakeReceipt({ purchasedAt: daysAgoIso(3), createdAt: daysAgoIso(3) }),
+      matchedName: 'Organic Milk',
+    });
+    mockBalance.mockResolvedValue({
+      totalIn: 1,
+      totalOut: 0,
+      net: 1,
+      lastInAt: daysAgoIso(3),
+      lastOutAt: null,
+    });
+    mockList.mockResolvedValue([fakeEvent({ direction: 'IN', createdAt: daysAgoIso(3) })]);
+    mockFeedbackSummary.mockResolvedValue({
+      latest: 'unsure',
+      latestAt: daysAgoIso(1),
+      haveCount7d: 0,
+      dontCount7d: 0,
+      unsureCount7d: 1,
+    });
+
+    const result = await answerQuestion('Do we have milk?');
+    expect(result.signals.find(s => s.type.startsWith('feedback.'))).toBeUndefined();
+  });
+
+  test('feedback older than 7 days no longer fires', async () => {
+    const item = fakeItem({ id: 1, name: 'Organic Milk', category: 'Milk' });
+    mockSearch.mockResolvedValue([item]);
+    mockFindReceipt.mockResolvedValue(null);
+    mockBalance.mockResolvedValue({
+      totalIn: 0,
+      totalOut: 0,
+      net: 0,
+      lastInAt: null,
+      lastOutAt: null,
+    });
+    mockFeedbackSummary.mockResolvedValue({
+      latest: 'have',
+      latestAt: daysAgoIso(20),
+      haveCount7d: 0,
+      dontCount7d: 0,
+      unsureCount7d: 0,
+    });
+
+    const result = await answerQuestion('Do we have milk?');
+    expect(result.signals.find(s => s.type.startsWith('feedback.'))).toBeUndefined();
   });
 });

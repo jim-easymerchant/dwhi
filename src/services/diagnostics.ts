@@ -8,6 +8,7 @@ import {
   type ConfigSource,
 } from './env';
 import { countAll as countAllAsks } from '@/repositories/askHistoryRepository';
+import { countAll as countAllFeedback } from '@/repositories/askFeedbackRepository';
 import { countLearnedPatterns } from './behaviorStats';
 
 export interface Diagnostics {
@@ -22,6 +23,7 @@ export interface Diagnostics {
   receiptCount: number;
   eventCount: number;
   askHistoryCount: number;
+  feedbackCount: number;
   learnedPatternsCount: number;
   seedPresent: boolean;
   appMode: 'Local POC';
@@ -40,6 +42,7 @@ export async function readDiagnostics(): Promise<Diagnostics> {
   let receiptCount = 0;
   let eventCount = 0;
   let askHistoryCount = 0;
+  let feedbackCount = 0;
   let learnedPatternsCount = 0;
 
   try {
@@ -57,6 +60,7 @@ export async function readDiagnostics(): Promise<Diagnostics> {
     receiptCount = receipts?.c ?? 0;
     eventCount = events?.c ?? 0;
     askHistoryCount = await countAllAsks();
+    feedbackCount = await countAllFeedback();
     learnedPatternsCount = await countLearnedPatterns();
     dbReady = true;
   } catch (e) {
@@ -75,6 +79,7 @@ export async function readDiagnostics(): Promise<Diagnostics> {
     receiptCount,
     eventCount,
     askHistoryCount,
+    feedbackCount,
     learnedPatternsCount,
     seedPresent: itemCount > 0,
     appMode: 'Local POC',
