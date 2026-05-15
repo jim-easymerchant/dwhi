@@ -157,17 +157,44 @@ In **Settings → Secrets and variables → Actions**, add:
    - `actions/setup-node@v4` (Node 20) + `actions/setup-java@v4` (Temurin 17)
    - `android-actions/setup-android@v3` to accept SDK licenses
    - `npm ci`
-   - writes `.env` from the GitHub secrets via shell redirection (the
-     value is never echoed; the step log only prints "OpenAI key
-     present: yes (length 56)" or a warning when absent)
+   - captures build metadata: short SHA (`GITHUB_SHA::7`), workflow run
+     number, ISO timestamp, and the `app.json` version
+   - writes `.env` from the GitHub secrets **and** the build metadata
+     above (`EXPO_PUBLIC_BUILD_COMMIT`, `EXPO_PUBLIC_BUILD_RUN`,
+     `EXPO_PUBLIC_BUILD_TIME`). Secrets are never echoed; only their
+     length is logged.
+   - **`npm test -- --ci`** — the Jest suite is the gate; if it's red
+     the workflow stops here and no APK is produced.
    - `npx tsc --noEmit`
    - `npx expo config --type prebuild`
    - `npx expo prebuild --platform android --non-interactive --clean`
    - `cd android && ./gradlew assembleRelease --no-daemon`
-   - `actions/upload-artifact@v4` ships the APK
+   - `actions/upload-artifact@v4` ships the APK under a
+     version-tagged name (see below)
 4. After ~10-15 minutes the workflow run's summary page has a
-   **`dwhi-android-apk`** artifact. Click it to download
-   `app-release.apk` and sideload onto an Android device.
+   **`dwhi-android-apk-0.1.0-<shortSha>`** artifact. Click it to
+   download `app-release.apk` and sideload onto an Android device.
+
+### Versioning + build metadata in Settings
+
+Every build stamps a small **Build** card at the top of Settings:
+
+```
+App version    0.1.0
+Build commit   a1b2c3d   (or "local" for dev / expo start)
+Build run      42        (workflow run number, "dev" locally)
+Build time     2026-05-14T18:23:11Z
+```
+
+The same fields land in the artifact name so you can correlate an
+installed APK with a workflow run at a glance. To cut a new test build:
+
+1. Bump `expo.version` in `app.json` (e.g. `0.1.0` → `0.1.1`).
+2. If you're shipping the APK to multiple devices or expect Android
+   to do an in-place upgrade, also bump `expo.android.versionCode`
+   (must be a higher integer than every previous build).
+3. Commit and push, then re-trigger the workflow. The new artifact's
+   name will reflect the new version.
 
 ### Exact artifact location
 

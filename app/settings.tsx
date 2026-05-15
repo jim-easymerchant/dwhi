@@ -38,6 +38,14 @@ export default function SettingsScreen() {
         {diag ? (
           <>
             <Card>
+              <Text style={styles.cardHeading}>Build</Text>
+              <Row label="App version" value={diag.build.appVersion} mono />
+              <Row label="Build commit" value={diag.build.buildCommit} mono tone={diag.build.buildCommit === 'local' ? 'muted' : 'good'} />
+              <Row label="Build run" value={diag.build.buildRun} mono />
+              <Row label="Build time" value={diag.build.buildTime} />
+            </Card>
+
+            <Card>
               <Row label="OpenAI receipt parsing" value={diag.aiEnabled ? 'Enabled' : 'Disabled'} tone={diag.aiEnabled ? 'good' : 'muted'} />
               <Row label="OpenAI model" value={diag.aiModel} />
               <Row label="Key length" value={String(diag.aiKeyLength)} tone={diag.aiKeyLength > 0 ? 'good' : 'muted'} />

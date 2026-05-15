@@ -25,6 +25,14 @@ module.exports = ({ config }) => {
   const apiKey = (process.env.EXPO_PUBLIC_OPENAI_API_KEY || '').trim() || null;
   const model = (process.env.EXPO_PUBLIC_OPENAI_MODEL || '').trim() || null;
 
+  // Build metadata. The workflow sets these explicitly; local `expo start`
+  // gets safe fallbacks so the Settings screen never has to special-case
+  // missing values.
+  const buildCommit = (process.env.EXPO_PUBLIC_BUILD_COMMIT || '').trim() || 'local';
+  const buildRun = (process.env.EXPO_PUBLIC_BUILD_RUN || '').trim() || 'dev';
+  const buildTime =
+    (process.env.EXPO_PUBLIC_BUILD_TIME || '').trim() || new Date().toISOString();
+
   // SAFE build-log diagnostics. Length only — never the value, never the
   // last-N chars (those live in the in-app Settings screen where the user
   // is already on their own device).
@@ -51,6 +59,9 @@ module.exports = ({ config }) => {
     console.log('[dwhi] OpenAI model: default (gpt-4o-mini)');
   }
   console.log(
+    `[dwhi] Build: version=${config.version ?? 'unknown'} commit=${buildCommit} run=${buildRun} time=${buildTime}`,
+  );
+  console.log(
     `[dwhi] Setting extra.openaiApiKey: ${apiKey ? 'yes' : 'no'} ; extra.openaiModel: ${
       model ? 'yes' : 'no'
     }`,
@@ -63,6 +74,9 @@ module.exports = ({ config }) => {
       ...(config.extra ?? {}),
       openaiApiKey: apiKey,
       openaiModel: model,
+      buildCommit,
+      buildRun,
+      buildTime,
     },
   };
 };

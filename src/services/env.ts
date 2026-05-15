@@ -123,3 +123,54 @@ export function getProbeSnapshot(): Record<ConfigSource, boolean> {
     none: false,
   };
 }
+
+// ---------------------------------------------------------------------------
+// Build metadata
+// ---------------------------------------------------------------------------
+
+/** Picks the first non-empty string for `key` across every known config path. */
+function readExtraString(key: string): string | null {
+  const c = Constants as unknown as Record<string, any>;
+  const candidates: any[] = [
+    c.expoConfig?.extra?.[key],
+    c.manifest2?.extra?.expoClient?.extra?.[key],
+    c.manifest?.extra?.[key],
+    (process.env as Record<string, string | undefined>)[`EXPO_PUBLIC_${key.toUpperCase()}`],
+  ];
+  for (const v of candidates) {
+    const s = asNonEmptyString(v);
+    if (s) return s;
+  }
+  return null;
+}
+
+export interface BuildInfo {
+  /** Semantic-ish version from app.json (e.g. "0.1.0"). */
+  appVersion: string;
+  /** Short SHA from the workflow; "local" when running on a dev machine. */
+  buildCommit: string;
+  /** Workflow run number; "dev" locally. */
+  buildRun: string;
+  /** ISO timestamp pinned at build time; falls back to evaluation time. */
+  buildTime: string;
+}
+
+/**
+ * Reads the version + build metadata stamped onto the manifest by
+ * app.config.js. Safe to call from any screen; all fields have local-dev
+ * fallbacks so the Settings card never has to show a blank.
+ */
+export function getBuildInfo(): BuildInfo {
+  const c = Constants as unknown as Record<string, any>;
+  const appVersion =
+    asNonEmptyString(c.expoConfig?.version) ??
+    asNonEmptyString(c.manifest2?.extra?.expoClient?.version) ??
+    asNonEmptyString(c.manifest?.version) ??
+    '0.0.0';
+  return {
+    appVersion,
+    buildCommit: readExtraString('buildCommit') ?? 'local',
+    buildRun: readExtraString('buildRun') ?? 'dev',
+    buildTime: readExtraString('buildTime') ?? new Date().toISOString(),
+  };
+}

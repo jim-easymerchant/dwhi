@@ -1,10 +1,12 @@
 import { getDb } from '@/db/database';
 import {
+  getBuildInfo,
   getConfigSource,
   getOpenAIKey,
   getOpenAIModel,
   getProbeSnapshot,
   isOpenAIConfigured,
+  type BuildInfo,
   type ConfigSource,
 } from './env';
 import { countAll as countAllAsks } from '@/repositories/askHistoryRepository';
@@ -27,6 +29,7 @@ export interface Diagnostics {
   learnedPatternsCount: number;
   seedPresent: boolean;
   appMode: 'Local POC';
+  build: BuildInfo;
 }
 
 /**
@@ -83,6 +86,7 @@ export async function readDiagnostics(): Promise<Diagnostics> {
     learnedPatternsCount,
     seedPresent: itemCount > 0,
     appMode: 'Local POC',
+    build: getBuildInfo(),
   };
 }
 
