@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -7,6 +7,7 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from 'react-native';
 import { useRouter } from 'expo-router';
@@ -19,13 +20,17 @@ import {
   recordFeedback,
   type AskFeedbackKind,
 } from '@/repositories/askFeedbackRepository';
+import { parseVoiceCommand } from '@/services/voice/voiceIntentParser';
+import { chooseAskDispatch } from '@/services/voice/askDispatch';
+import { speechService } from '@/services/voice/speechService';
+import { useCaptureStore } from '@/services/captureStore';
 import { colors, spacing, typography } from '@/theme/colors';
 
 const SUGGESTIONS = [
   'Do we have pickles?',
-  'Do we have milk?',
-  'Do we have ketchup?',
-  'Do we have yogurt?',
+  'Add milk',
+  'We\'re out of ketchup',
+  'Remove two yogurts',
 ];
 
 const CONFIDENCE_COLOR: Record<ConfidenceLevel, string> = {
@@ -62,10 +67,15 @@ function FeedbackChip({ label, tone, onPress }: FeedbackChipProps) {
 
 export default function AskScreen() {
   const router = useRouter();
+  const stageItemDraft = useCaptureStore(s => s.stageItemDraft);
+  const inputRef = useRef<TextInput>(null);
+
   const [query, setQuery] = useState('');
   const [answer, setAnswer] = useState<ConfidenceResult | null>(null);
   const [showSignals, setShowSignals] = useState(false);
   const [busy, setBusy] = useState(false);
+  /** Brief hint shown when the mic is tapped (v1 = text fallback). */
+  const [micHintVisible, setMicHintVisible] = useState(false);
   /**
    * Tracks which feedback option was tapped for the current answer. Reset
    * every time a new answer arrives. Keeps the flow one-tap: once you've
@@ -73,30 +83,65 @@ export default function AskScreen() {
    */
   const [submittedFeedback, setSubmittedFeedback] = useState<AskFeedbackKind | null>(null);
 
-  const ask = async (q: string) => {
-    const trimmed = q.trim();
+  /**
+   * Single entry point for both typed questions and "voice" transcripts.
+   * Pipes the input through the voice intent parser first; if it's a
+   * recognisable IN/OUT command we stage and bounce to confirm-item.
+   * Otherwise — including pure ASK questions and UNKNOWN gibberish — we
+   * hand off to the existing confidence engine and render its answer.
+   */
+  const submit = async (raw: string) => {
+    const trimmed = raw.trim();
     if (!trimmed) return;
+
+    const parsed = parseVoiceCommand(trimmed);
+    const dispatch = chooseAskDispatch(parsed);
+
+    if (dispatch.kind === 'staged') {
+      stageItemDraft({
+        imageUri: null,
+        direction: dispatch.direction,
+        source: 'manual',
+        parsed: {
+          manufacturer: null,
+          name: dispatch.itemName,
+          category: null,
+          containerType: null,
+          size: null,
+        },
+        lookupNote: `Heard: "${dispatch.rawTranscript}" · qty ${dispatch.quantity}`,
+      });
+      router.replace('/confirm-item');
+      return;
+    }
+
     setBusy(true);
     setAnswer(null);
     setShowSignals(false);
     setSubmittedFeedback(null);
     try {
-      const result = await answerQuestion(trimmed);
+      const result = await answerQuestion(dispatch.query);
       setAnswer(result);
     } finally {
       setBusy(false);
     }
   };
 
+  const onMicPress = () => {
+    // v1: no live recogniser yet — make the mic a real affordance by
+    // focusing the question field and showing a one-line hint about the
+    // current speech mode.
+    setMicHintVisible(true);
+    inputRef.current?.focus();
+  };
+
   const submitFeedback = async (kind: AskFeedbackKind) => {
     if (!answer || submittedFeedback) return;
-    // Optimistic — show the confirmation immediately, write asynchronously.
     setSubmittedFeedback(kind);
     try {
       await recordFeedback(answer.normalizedTerm, answer.level, kind);
     } catch (e) {
       console.warn('[ask] recordFeedback failed:', e);
-      // Roll back so the user can try again.
       setSubmittedFeedback(null);
     }
   };
@@ -111,23 +156,43 @@ export default function AskScreen() {
           contentContainerStyle={styles.scroll}
           keyboardShouldPersistTaps="handled"
         >
-          <Text style={styles.heading}>Ask about an item</Text>
+          <Text style={styles.heading}>Ask</Text>
           <Text style={styles.helper}>
-            Type a question. No pressure on getting the wording right.
+            Ask, add, or remove. Try a question or a quick command.
           </Text>
 
-          <TextField
-            placeholder="Do we have pickles?"
-            value={query}
-            onChangeText={setQuery}
-            onSubmitEditing={() => ask(query)}
-            returnKeyType="search"
-            autoFocus
-          />
+          <View style={styles.inputRow}>
+            <View style={{ flex: 1 }}>
+              <TextField
+                ref={inputRef}
+                placeholder="Do we have pickles? · Add milk"
+                value={query}
+                onChangeText={setQuery}
+                onSubmitEditing={() => submit(query)}
+                returnKeyType="search"
+                autoFocus
+              />
+            </View>
+            <Pressable
+              onPress={onMicPress}
+              accessibilityRole="button"
+              accessibilityLabel="Voice"
+              style={({ pressed }) => [
+                styles.micButton,
+                pressed && { opacity: 0.7 },
+              ]}
+            >
+              <Text style={styles.micGlyph}>🎙</Text>
+            </Pressable>
+          </View>
+
+          {micHintVisible ? (
+            <Text style={styles.micHint}>{speechService.describeMode()}</Text>
+          ) : null}
 
           <BigButton
             label={busy ? 'Thinking…' : 'Ask'}
-            onPress={() => ask(query)}
+            onPress={() => submit(query)}
             disabled={busy || !query.trim()}
           />
 
@@ -138,7 +203,7 @@ export default function AskScreen() {
                 style={styles.suggestion}
                 onPress={() => {
                   setQuery(s);
-                  ask(s);
+                  void submit(s);
                 }}
               >
                 <Text style={styles.suggestionText}>{s}</Text>
@@ -243,6 +308,29 @@ const styles = StyleSheet.create({
   helper: {
     ...typography.caption,
     color: colors.textMuted,
+  },
+  inputRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: spacing.sm,
+  },
+  micButton: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: colors.surfaceElevated,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  micGlyph: {
+    fontSize: 22,
+  },
+  micHint: {
+    ...typography.caption,
+    color: colors.textMuted,
+    paddingHorizontal: spacing.xs,
   },
   suggestionsRow: {
     flexDirection: 'row',

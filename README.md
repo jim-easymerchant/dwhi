@@ -130,21 +130,21 @@ The user is never trapped on the scanner:
   again (IN or OUT), it links to the same item even if the name in
   the DB drifted. Same product, same SKU.
 
-## Push-to-talk voice commands
+## Voice + text commands inside Ask
 
-The home screen exposes a small **🎙 Voice command** chip. Tap it to open
-a modal that turns a single utterance into an Ask/IN/OUT action. The
-pipeline is intentionally tiny:
+Voice isn't a separate mode — it lives inside the **Ask** screen.
+There's one input field for both questions and quick commands, with a
+small 🎙 mic button next to it. The pipeline is intentionally tiny:
 
 ```
-mic button → transcript → normalizer → regex intent parser → confirm card
-                                                             ├─ ASK → confidence engine, inline answer
-                                                             ├─ IN  → confirm-item (prefilled, direction=IN)
-                                                             └─ OUT → confirm-item (prefilled, direction=OUT)
+input (typed or transcribed) → normalizer → regex intent parser → dispatcher
+                                                                  ├─ ASK / UNKNOWN → confidence engine, inline answer
+                                                                  ├─ IN  → confirm-item (prefilled, direction=IN)
+                                                                  └─ OUT → confirm-item (prefilled, direction=OUT)
 ```
 
-The user always sees a confirmation card with the parsed intent and item
-before anything is saved.
+ASK answers render in place; IN/OUT route to the existing confirm-item
+screen so the user still taps Confirm before anything is saved.
 
 ### Supported phrasings
 
@@ -180,16 +180,17 @@ The parser:
 
 ### Speech-to-text path
 
-v1 ships the entire pipeline with the speech-to-text layer behind a clean
-`SpeechService` interface. The current implementation is a **manual text
-fallback**: tapping the mic opens a small text field labelled *"What did
-you say?"* — the user types what they would have spoken, and the parser
+The intent pipeline ships behind a clean `SpeechService` interface. The
+current implementation is a **manual text fallback**: tapping the 🎙
+button on Ask focuses the same input field that handles typed questions
+and shows a one-line note about the active speech mode. The parser
 handles the rest exactly as it would for a real transcript.
 
 To swap in real on-device speech recognition (e.g. via
 `@jamsch/expo-speech-recognition`), implement the same `SpeechService`
 interface in `src/services/voice/speechService.ts`. The rest of the
-pipeline (normalizer, parser, confirm UI, dispatch) runs unchanged.
+pipeline (normalizer, parser, dispatcher, confirm-item routing) runs
+unchanged.
 
 ### Privacy
 

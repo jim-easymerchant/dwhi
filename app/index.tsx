@@ -4,7 +4,6 @@ import { useFocusEffect, useRouter } from 'expo-router';
 import { ScreenContainer } from '@/components/ScreenContainer';
 import { BigButton } from '@/components/BigButton';
 import { RecentActivity } from '@/components/RecentActivity';
-import { MicButton } from '@/components/MicButton';
 import {
   listRecentActivity,
   type RecentActivityEntry,
@@ -92,8 +91,6 @@ export default function HomeScreen() {
             }
           />
         </View>
-
-        <MicButton onPress={() => router.push('/voice')} />
 
         <RecentActivity entries={activity} />
       </ScrollView>
