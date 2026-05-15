@@ -12,6 +12,7 @@ import {
 import { countAll as countAllAsks } from '@/repositories/askHistoryRepository';
 import { countAll as countAllFeedback } from '@/repositories/askFeedbackRepository';
 import { countLearnedPatterns } from './behaviorStats';
+import { speechService } from './voice/speechService';
 
 export interface Diagnostics {
   aiEnabled: boolean;
@@ -30,6 +31,10 @@ export interface Diagnostics {
   seedPresent: boolean;
   appMode: 'Local POC';
   build: BuildInfo;
+  voice: {
+    available: boolean;
+    mode: string;
+  };
 }
 
 /**
@@ -87,6 +92,10 @@ export async function readDiagnostics(): Promise<Diagnostics> {
     seedPresent: itemCount > 0,
     appMode: 'Local POC',
     build: getBuildInfo(),
+    voice: {
+      available: speechService.isAvailable(),
+      mode: speechService.describeMode(),
+    },
   };
 }
 

@@ -130,6 +130,76 @@ The user is never trapped on the scanner:
   again (IN or OUT), it links to the same item even if the name in
   the DB drifted. Same product, same SKU.
 
+## Push-to-talk voice commands
+
+The home screen exposes a small **🎙 Voice command** chip. Tap it to open
+a modal that turns a single utterance into an Ask/IN/OUT action. The
+pipeline is intentionally tiny:
+
+```
+mic button → transcript → normalizer → regex intent parser → confirm card
+                                                             ├─ ASK → confidence engine, inline answer
+                                                             ├─ IN  → confirm-item (prefilled, direction=IN)
+                                                             └─ OUT → confirm-item (prefilled, direction=OUT)
+```
+
+The user always sees a confirmation card with the parsed intent and item
+before anything is saved.
+
+### Supported phrasings
+
+The regex parser handles common short imperatives and questions. Examples:
+
+| Said | Intent | Item | Qty |
+| --- | --- | --- | --- |
+| `Add milk` | IN | milk | 1 |
+| `I just bought milk` | IN | milk | 1 |
+| `Add three apples` | IN | apple | 3 |
+| `Picked up a dozen eggs` | IN | egg | 12 |
+| `Remove two yogurts` | OUT | yogurt | 2 |
+| `We're out of ketchup` | OUT | ketchup | 1 |
+| `Scan out yogurt` | OUT | yogurt | 1 |
+| `Used up the last of the milk` | OUT | milk | 1 |
+| `Do we have eggs?` | ASK | egg | – |
+| `Did we buy ketchup?` | ASK | ketchup | – |
+| `Got any milk?` | ASK | milk | – |
+| `Are we out of paper towels?` | ASK | paper towel | – |
+| *(empty / nonsense)* | UNKNOWN | – | – |
+
+The parser:
+- expands contractions (`we're` → `we are`) so phrases like "we're out of"
+  match the OUT pattern
+- strips filler (`uh`, `um`, `like`, `please`) and connector tokens (`a`,
+  `the`, `of`, `last`, `left`, `over`) so the residual is just the item
+- recognizes digit *and* word quantities including `dozen`, `couple`, `pair`
+- light singularization (`yogurts` → `yogurt`) so the confidence engine's
+  `searchByName` finds the right row
+- never auto-saves — UNKNOWN routes to a manual edit field; IN/OUT routes
+  to the existing confirm-item screen (where you can still edit before tap
+  Confirm)
+
+### Speech-to-text path
+
+v1 ships the entire pipeline with the speech-to-text layer behind a clean
+`SpeechService` interface. The current implementation is a **manual text
+fallback**: tapping the mic opens a small text field labelled *"What did
+you say?"* — the user types what they would have spoken, and the parser
+handles the rest exactly as it would for a real transcript.
+
+To swap in real on-device speech recognition (e.g. via
+`@jamsch/expo-speech-recognition`), implement the same `SpeechService`
+interface in `src/services/voice/speechService.ts`. The rest of the
+pipeline (normalizer, parser, confirm UI, dispatch) runs unchanged.
+
+### Privacy
+
+- The manual-text fallback never sends anything off-device.
+- A future on-device recognizer would, by default, use the platform's
+  built-in engine (iOS Speech framework / Android `SpeechRecognizer`).
+  Some Android OEM builds route through Google's servers; this would be
+  documented at the moment the real recognizer ships and surfaced in the
+  Settings → Voice command card.
+
 ## Building an Android APK (GitHub Actions, direct Gradle)
 
 The primary CI path is a `workflow_dispatch`-only GitHub Actions job that

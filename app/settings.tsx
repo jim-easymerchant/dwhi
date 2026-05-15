@@ -89,6 +89,16 @@ export default function SettingsScreen() {
             </Card>
 
             <Card>
+              <Text style={styles.cardHeading}>Voice command</Text>
+              <Row
+                label="Speech available"
+                value={diag.voice.available ? 'Yes' : 'No'}
+                tone={diag.voice.available ? 'good' : 'muted'}
+              />
+              <Text style={styles.privacyBody}>{diag.voice.mode}</Text>
+            </Card>
+
+            <Card>
               <Row label="App mode" value={diag.appMode} />
             </Card>
 

@@ -81,6 +81,10 @@ export default function RootLayout() {
           <Stack.Screen name="capture-item-photo" options={{ title: 'Photo' }} />
           <Stack.Screen name="confirm-item" options={{ title: 'Confirm Item' }} />
           <Stack.Screen name="settings" options={{ title: 'Settings' }} />
+          <Stack.Screen
+            name="voice"
+            options={{ presentation: 'modal', title: 'Voice' }}
+          />
         </Stack>
       </SafeAreaProvider>
     </GestureHandlerRootView>
