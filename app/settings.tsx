@@ -5,12 +5,22 @@ import { ScreenContainer } from '@/components/ScreenContainer';
 import { Card } from '@/components/Card';
 import { BigButton } from '@/components/BigButton';
 import { readDiagnostics, getKeyHint, type Diagnostics } from '@/services/diagnostics';
+import { syncNow } from '@/services/sync/syncNow';
+import type { SyncResult } from '@/services/sync/syncTypes';
 import { colors, spacing, typography } from '@/theme/colors';
+
+const SYNC_MODE_LABEL: Record<Diagnostics['cloudSync']['mode'], string> = {
+  'local-only': 'Local only',
+  'configured-signed-out': 'Configured · Signed out',
+  'configured-signed-in': 'Sync ready',
+};
 
 export default function SettingsScreen() {
   const router = useRouter();
   const [diag, setDiag] = useState<Diagnostics | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+  const [lastSync, setLastSync] = useState<SyncResult | null>(null);
 
   const load = useCallback(async () => {
     setRefreshing(true);
@@ -24,6 +34,18 @@ export default function SettingsScreen() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  const handleSyncNow = useCallback(async () => {
+    if (syncing) return;
+    setSyncing(true);
+    try {
+      const result = await syncNow();
+      setLastSync(result);
+    } finally {
+      setSyncing(false);
+      void load(); // refresh pending counts
+    }
+  }, [load, syncing]);
 
   return (
     <ScreenContainer>
@@ -121,6 +143,45 @@ export default function SettingsScreen() {
                 />
               </Card>
             ) : null}
+
+            <Card>
+              <Text style={styles.cardHeading}>Cloud sync</Text>
+              <Row
+                label="Mode"
+                value={SYNC_MODE_LABEL[diag.cloudSync.mode]}
+                tone={
+                  diag.cloudSync.mode === 'configured-signed-in'
+                    ? 'good'
+                    : diag.cloudSync.mode === 'configured-signed-out'
+                      ? 'warn'
+                      : 'muted'
+                }
+              />
+              <Row
+                label="Pending changes"
+                value={String(diag.cloudSync.pendingChangesTotal)}
+                tone={diag.cloudSync.pendingChangesTotal > 0 ? 'warn' : 'muted'}
+              />
+              {lastSync ? (
+                <Row
+                  label="Last sync"
+                  value={`${lastSync.message} (${new Date(lastSync.finishedAt).toLocaleTimeString()})`}
+                  tone={lastSync.ok ? 'good' : 'warn'}
+                />
+              ) : (
+                <Row label="Last sync" value="—" tone="muted" />
+              )}
+              <Text style={styles.privacyBody}>{diag.cloudSync.description}</Text>
+              <BigButton
+                label={syncing ? 'Syncing…' : 'Sync now'}
+                variant="secondary"
+                disabled={
+                  syncing ||
+                  diag.cloudSync.mode !== 'configured-signed-in'
+                }
+                onPress={() => void handleSyncNow()}
+              />
+            </Card>
 
             <Card>
               <Row label="App mode" value={diag.appMode} />

@@ -14,6 +14,9 @@ import { countAll as countAllFeedback } from '@/repositories/askFeedbackReposito
 import { countLearnedPatterns } from './behaviorStats';
 import { speechService } from './voice/speechService';
 import { getActiveContextOrNull } from './householdContext';
+import { countPendingChanges, getSyncMode } from './sync/syncStatus';
+import { describeSupabaseStatus } from './supabaseClient';
+import type { SyncMode } from './sync/syncTypes';
 
 export interface Diagnostics {
   aiEnabled: boolean;
@@ -46,6 +49,12 @@ export interface Diagnostics {
     deviceUuidShort: string;
     syncStatus: 'Local only';
   } | null;
+  cloudSync: {
+    mode: SyncMode;
+    description: string;
+    pendingChangesTotal: number;
+    pendingByTable: Record<string, number>;
+  };
 }
 
 /**
@@ -109,6 +118,27 @@ export async function readDiagnostics(): Promise<Diagnostics> {
       kind: speechService.kind,
     },
     household: buildHouseholdDiagnostic(),
+    cloudSync: await buildCloudSyncDiagnostic(),
+  };
+}
+
+async function buildCloudSyncDiagnostic(): Promise<Diagnostics['cloudSync']> {
+  let mode: SyncMode = 'local-only';
+  let pending: { total: number; byTable: Record<string, number> } = {
+    total: 0,
+    byTable: {},
+  };
+  try {
+    mode = await getSyncMode();
+    pending = await countPendingChanges();
+  } catch (e) {
+    console.warn('[dwhi] cloud-sync diagnostics failed:', e);
+  }
+  return {
+    mode,
+    description: describeSupabaseStatus(),
+    pendingChangesTotal: pending.total,
+    pendingByTable: pending.byTable,
   };
 }
 

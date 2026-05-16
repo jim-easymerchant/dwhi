@@ -25,6 +25,11 @@ module.exports = ({ config }) => {
   const apiKey = (process.env.EXPO_PUBLIC_OPENAI_API_KEY || '').trim() || null;
   const model = (process.env.EXPO_PUBLIC_OPENAI_MODEL || '').trim() || null;
 
+  // Supabase cloud-sync config. Empty values mean the app stays Local only.
+  const supabaseUrl = (process.env.EXPO_PUBLIC_SUPABASE_URL || '').trim() || null;
+  const supabaseAnonKey =
+    (process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '').trim() || null;
+
   // Build metadata. The workflow sets these explicitly; local `expo start`
   // gets safe fallbacks so the Settings screen never has to special-case
   // missing values.
@@ -66,6 +71,11 @@ module.exports = ({ config }) => {
       model ? 'yes' : 'no'
     }`,
   );
+  console.log(
+    `[dwhi] Supabase configured: ${
+      supabaseUrl && supabaseAnonKey ? 'yes' : 'no (Local only)'
+    }`,
+  );
   console.log('-----------------------------------------');
 
   return {
@@ -74,6 +84,8 @@ module.exports = ({ config }) => {
       ...(config.extra ?? {}),
       openaiApiKey: apiKey,
       openaiModel: model,
+      supabaseUrl,
+      supabaseAnonKey,
       buildCommit,
       buildRun,
       buildTime,

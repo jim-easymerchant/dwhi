@@ -232,6 +232,58 @@ The `expo-speech-recognition` config plugin (set in `app.json`) requests:
   pipeline as every typed input. The Settings → Voice card shows
   whether the live mode is native or manual.
 
+## Cloud sync foundation (Supabase, opt-in)
+
+The app is **local-first by default**. When the Supabase env vars are
+unset, every flow runs entirely on-device — the Settings → **Cloud sync**
+card reads *"Mode: Local only"* and nothing leaves the phone.
+
+When the env vars *are* set, the app prepares for shared-household sync
+but does not push or pull anything until the auth UI lands. The
+foundation that ships in this branch:
+
+- `@supabase/supabase-js` client created lazily via env (`null` when
+  unset).
+- Local SQLite gets sync metadata columns added by an idempotent
+  migration: `remote_id`, `sync_status` (`pending` / `synced` / `error`),
+  `last_synced_at`, `updated_at` (where missing), `deleted_at`. Indexes
+  on `sync_status` so the "pending changes" count stays cheap.
+- `src/services/sync/` orchestrator: `syncTypes` / `syncStatus` /
+  `outboundSync` / `inboundSync` / `syncNow`. The push/pull bodies are
+  stubs that log what they *would* sync.
+- Settings → **Cloud sync** card shows mode, pending count, the last
+  manual-sync result, and a **Sync now** button (disabled until
+  signed in).
+
+### Env vars
+
+| Env | Required for sync | Notes |
+| --- | --- | --- |
+| `EXPO_PUBLIC_SUPABASE_URL` | yes | Found in Supabase project settings → API |
+| `EXPO_PUBLIC_SUPABASE_ANON_KEY` | yes | The anon-public key. Safe to embed — RLS does the scoping |
+
+Both are inlined into the JS bundle via `app.config.js`. Leaking them is
+acceptable because RLS rejects every query that isn't from a signed-in
+member of the household.
+
+### Schema
+
+`supabase/sql/001_initial_sync_schema.sql` is idempotent — paste it into
+the Supabase SQL editor and Run. See `supabase/README.md` for the full
+setup notes and RLS overview.
+
+### What's stubbed
+
+- Auth (sign in / sign up): not implemented; **Sync now** button stays
+  disabled until the auth branch lands.
+- Outbound + inbound: the modules log "would push N rows" / "would pull
+  remote changes" and return zero counts.
+- Realtime, push notifications, background workers: out of scope.
+
+The data model and the migration path are stable across the
+local-first ↔ cloud-sync transition. Adding real sync later only touches
+`outboundSync.ts` / `inboundSync.ts` and the auth UI.
+
 ## Building an Android APK (GitHub Actions, direct Gradle)
 
 The primary CI path is a `workflow_dispatch`-only GitHub Actions job that

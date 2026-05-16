@@ -153,9 +153,7 @@ export interface BuildInfo {
   buildRun: string;
   /** ISO timestamp pinned at build time; falls back to evaluation time. */
   buildTime: string;
-}
-
-/**
+}/**
  * Reads the version + build metadata stamped onto the manifest by
  * app.config.js. Safe to call from any screen; all fields have local-dev
  * fallbacks so the Settings card never has to show a blank.
@@ -173,4 +171,21 @@ export function getBuildInfo(): BuildInfo {
     buildRun: readExtraString('buildRun') ?? 'dev',
     buildTime: readExtraString('buildTime') ?? new Date().toISOString(),
   };
+}
+
+// ---------------------------------------------------------------------------
+// Supabase (cloud-sync foundation)
+// ---------------------------------------------------------------------------
+
+export function getSupabaseUrl(): string | null {
+  return readExtraString('supabaseUrl');
+}
+
+export function getSupabaseAnonKey(): string | null {
+  return readExtraString('supabaseAnonKey');
+}
+
+/** True when both Supabase URL and anon key are present in the manifest. */
+export function isSupabaseConfigured(): boolean {
+  return getSupabaseUrl() !== null && getSupabaseAnonKey() !== null;
 }

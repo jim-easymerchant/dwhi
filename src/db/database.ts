@@ -131,6 +131,40 @@ async function runInit(): Promise<void> {
   await addColumnIfMissing('ask_feedback', 'created_by_member_id', 'INTEGER');
   await addColumnIfMissing('ask_feedback', 'created_by_device_id', 'INTEGER');
 
+  // Sync metadata. Strictly local-only today; populated by the cloud-sync
+  // service in a future branch. The columns exist now so the schema is
+  // stable across the local↔cloud transition.
+  //
+  //   remote_id       — UUID-shaped string assigned by Supabase
+  //   sync_status     — 'pending' | 'synced' | 'error' (always 'pending'
+  //                     locally until syncNow flips it)
+  //   last_synced_at  — ISO timestamp of the last successful push/pull
+  //   updated_at      — ISO timestamp; bumped on every local write
+  //   deleted_at      — soft-delete tombstone for sync; null otherwise
+  for (const table of [
+    'items',
+    'inventory_events',
+    'receipts',
+    'receipt_items',
+    'ask_history',
+    'ask_feedback',
+  ]) {
+    await addColumnIfMissing(table, 'remote_id', 'TEXT');
+    await addColumnIfMissing(table, 'sync_status', 'TEXT');
+    await addColumnIfMissing(table, 'last_synced_at', 'TEXT');
+    await addColumnIfMissing(table, 'deleted_at', 'TEXT');
+  }
+  // `updated_at` already exists on items; add to the rest for parity.
+  for (const table of [
+    'inventory_events',
+    'receipts',
+    'receipt_items',
+    'ask_history',
+    'ask_feedback',
+  ]) {
+    await addColumnIfMissing(table, 'updated_at', 'TEXT');
+  }
+
   // Phase 3: indexes that depend on the above columns. These were the
   // landmines on existing installs — see schema.ts header comment.
   await createIndexIfColumnExists('idx_items_barcode', 'items', 'barcode');
@@ -159,6 +193,22 @@ async function runInit(): Promise<void> {
     'ask_feedback',
     'household_id',
   );
+  // Sync-status indexes so "count pending" scans stay cheap once the table
+  // has thousands of rows.
+  for (const table of [
+    'items',
+    'inventory_events',
+    'receipts',
+    'receipt_items',
+    'ask_history',
+    'ask_feedback',
+  ]) {
+    await createIndexIfColumnExists(
+      `idx_${table}_sync_status`,
+      table,
+      'sync_status',
+    );
+  }
 }
 
 /**
