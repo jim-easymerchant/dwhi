@@ -4,6 +4,7 @@
     "strict": true,
     "isolatedModules": true,
     "baseUrl": ".",
+    "types": ["jest", "node"],
     "paths": {
       "@/*": ["./src/*"]
     }
