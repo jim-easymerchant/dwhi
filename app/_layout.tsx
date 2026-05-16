@@ -1,4 +1,7 @@
 import 'react-native-gesture-handler';
+// Required by @supabase/supabase-js on React Native — gives us a working
+// global URL implementation before any HTTP call. Side-effect import only.
+import 'react-native-url-polyfill/auto';
 import React, { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Stack } from 'expo-router';
@@ -86,6 +89,11 @@ export default function RootLayout() {
           <Stack.Screen name="capture-item-photo" options={{ title: 'Photo' }} />
           <Stack.Screen name="confirm-item" options={{ title: 'Confirm Item' }} />
           <Stack.Screen name="settings" options={{ title: 'Settings' }} />
+          <Stack.Screen
+            name="auth"
+            options={{ presentation: 'modal', title: 'Sign in' }}
+          />
+          <Stack.Screen name="household" options={{ title: 'Household' }} />
         </Stack>
       </SafeAreaProvider>
     </GestureHandlerRootView>

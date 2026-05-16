@@ -53,7 +53,10 @@ describe('getSupabaseClient', () => {
       'ey...anon',
       expect.objectContaining({
         auth: expect.objectContaining({
-          persistSession: false,
+          // The invite branch persists sessions via AsyncStorage so the
+          // user stays signed in across cold starts.
+          persistSession: true,
+          autoRefreshToken: true,
         }),
       }),
     );

@@ -27,6 +27,7 @@ describe('householdContext', () => {
         name: 'Shared House',
         createdAt: '2026-05-01T00:00:00Z',
         updatedAt: '2026-05-01T00:00:00Z',
+        remoteId: null,
       },
       member: {
         id: 42,
@@ -35,6 +36,8 @@ describe('householdContext', () => {
         role: 'owner',
         localDeviceId: 7,
         createdAt: '2026-05-01T00:00:00Z',
+        remoteId: null,
+        remoteUserId: null,
       },
       device: {
         id: 7,

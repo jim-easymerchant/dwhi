@@ -131,6 +131,12 @@ async function runInit(): Promise<void> {
   await addColumnIfMissing('ask_feedback', 'created_by_member_id', 'INTEGER');
   await addColumnIfMissing('ask_feedback', 'created_by_device_id', 'INTEGER');
 
+  // Remote-ID columns so a local household / member row can be associated
+  // with its Supabase counterpart after an invite is accepted.
+  await addColumnIfMissing('households', 'remote_id', 'TEXT');
+  await addColumnIfMissing('household_members', 'remote_id', 'TEXT');
+  await addColumnIfMissing('household_members', 'remote_user_id', 'TEXT');
+
   // Sync metadata. Strictly local-only today; populated by the cloud-sync
   // service in a future branch. The columns exist now so the schema is
   // stable across the local↔cloud transition.
