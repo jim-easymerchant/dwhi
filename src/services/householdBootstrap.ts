@@ -14,7 +14,7 @@
  * No network, no auth, no sync — only the local SQLite store is touched.
  */
 
-import { getDb } from '@/db/database';
+import { columnExists, getDb } from '@/db/database';
 import {
   createDevice,
   createHousehold,
@@ -78,54 +78,88 @@ async function backfillHouseholdScope(
   memberId: number,
   deviceId: number,
 ): Promise<void> {
-  const db = await getDb();
+  // Belt-and-braces: every UPDATE references a column the migration was
+  // supposed to add. If migration ran successfully the columns exist, but
+  // we PRAGMA-check anyway so a partial migration doesn't crash the whole
+  // bootstrap.
+  await runIfColumn('items', 'household_id', async db => {
+    await db.runAsync(
+      'UPDATE items SET household_id = ? WHERE household_id IS NULL;',
+      householdId,
+    );
+  });
 
-  await db.runAsync(
-    'UPDATE items SET household_id = ? WHERE household_id IS NULL;',
-    householdId,
-  );
-  await db.runAsync(
-    `UPDATE inventory_events
-        SET household_id = ?,
-            created_by_member_id = COALESCE(created_by_member_id, ?),
-            created_by_device_id = COALESCE(created_by_device_id, ?)
-      WHERE household_id IS NULL;`,
-    householdId,
-    memberId,
-    deviceId,
-  );
-  await db.runAsync(
-    `UPDATE receipts
-        SET household_id = ?,
-            created_by_member_id = COALESCE(created_by_member_id, ?),
-            created_by_device_id = COALESCE(created_by_device_id, ?)
-      WHERE household_id IS NULL;`,
-    householdId,
-    memberId,
-    deviceId,
-  );
-  await db.runAsync(
-    'UPDATE receipt_items SET household_id = ? WHERE household_id IS NULL;',
-    householdId,
-  );
-  await db.runAsync(
-    `UPDATE ask_history
-        SET household_id = ?,
-            created_by_member_id = COALESCE(created_by_member_id, ?),
-            created_by_device_id = COALESCE(created_by_device_id, ?)
-      WHERE household_id IS NULL;`,
-    householdId,
-    memberId,
-    deviceId,
-  );
-  await db.runAsync(
-    `UPDATE ask_feedback
-        SET household_id = ?,
-            created_by_member_id = COALESCE(created_by_member_id, ?),
-            created_by_device_id = COALESCE(created_by_device_id, ?)
-      WHERE household_id IS NULL;`,
-    householdId,
-    memberId,
-    deviceId,
-  );
+  await runIfColumn('inventory_events', 'household_id', async db => {
+    await db.runAsync(
+      `UPDATE inventory_events
+          SET household_id = ?,
+              created_by_member_id = COALESCE(created_by_member_id, ?),
+              created_by_device_id = COALESCE(created_by_device_id, ?)
+        WHERE household_id IS NULL;`,
+      householdId,
+      memberId,
+      deviceId,
+    );
+  });
+
+  await runIfColumn('receipts', 'household_id', async db => {
+    await db.runAsync(
+      `UPDATE receipts
+          SET household_id = ?,
+              created_by_member_id = COALESCE(created_by_member_id, ?),
+              created_by_device_id = COALESCE(created_by_device_id, ?)
+        WHERE household_id IS NULL;`,
+      householdId,
+      memberId,
+      deviceId,
+    );
+  });
+
+  await runIfColumn('receipt_items', 'household_id', async db => {
+    await db.runAsync(
+      'UPDATE receipt_items SET household_id = ? WHERE household_id IS NULL;',
+      householdId,
+    );
+  });
+
+  await runIfColumn('ask_history', 'household_id', async db => {
+    await db.runAsync(
+      `UPDATE ask_history
+          SET household_id = ?,
+              created_by_member_id = COALESCE(created_by_member_id, ?),
+              created_by_device_id = COALESCE(created_by_device_id, ?)
+        WHERE household_id IS NULL;`,
+      householdId,
+      memberId,
+      deviceId,
+    );
+  });
+
+  await runIfColumn('ask_feedback', 'household_id', async db => {
+    await db.runAsync(
+      `UPDATE ask_feedback
+          SET household_id = ?,
+              created_by_member_id = COALESCE(created_by_member_id, ?),
+              created_by_device_id = COALESCE(created_by_device_id, ?)
+        WHERE household_id IS NULL;`,
+      householdId,
+      memberId,
+      deviceId,
+    );
+  });
+}
+
+async function runIfColumn(
+  table: string,
+  column: string,
+  fn: (db: Awaited<ReturnType<typeof getDb>>) => Promise<void>,
+): Promise<void> {
+  if (!(await columnExists(table, column))) {
+    console.warn(
+      `[dwhi] backfill skipped: ${table}.${column} missing — migration may have been incomplete.`,
+    );
+    return;
+  }
+  const db = await getDb();
+  await fn(db);
 }

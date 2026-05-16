@@ -13,6 +13,10 @@ const getAllAsync = jest.fn();
 jest.mock('@/db/database', () => ({
   getDb: jest.fn(() => Promise.resolve({ runAsync, getFirstAsync, getAllAsync })),
   nowIso: () => new Date(FIXED_NOW).toISOString(),
+  // The real `columnExists` would PRAGMA the DB; for these bootstrap
+  // tests we assume the migration ran successfully and every household_id
+  // column is present.
+  columnExists: jest.fn(() => Promise.resolve(true)),
 }));
 
 import { bootstrapHousehold } from '../householdBootstrap';

@@ -21,70 +21,144 @@ export function getDb(): Promise<SQLite.SQLiteDatabase> {
   return dbPromise;
 }
 
+// ---------------------------------------------------------------------------
+// Introspection helpers
+// ---------------------------------------------------------------------------
+
+/** Single-identifier guard so we can safely interpolate table/column names. */
+const SAFE_IDENT = /^[A-Za-z_][A-Za-z0-9_]*$/;
+
+function assertSafeIdent(name: string, kind: 'table' | 'column' | 'index'): void {
+  if (!SAFE_IDENT.test(name)) {
+    throw new Error(`Unsafe ${kind} identifier: ${name}`);
+  }
+}
+
+/**
+ * Reads `PRAGMA table_info(table)` and reports whether the column exists.
+ * Returns false if the table itself doesn't exist (PRAGMA returns no rows).
+ */
+export async function columnExists(
+  table: string,
+  column: string,
+): Promise<boolean> {
+  assertSafeIdent(table, 'table');
+  assertSafeIdent(column, 'column');
+  const db = await getDb();
+  const rows = await db.getAllAsync<{ name: string }>(
+    `PRAGMA table_info(${table});`,
+  );
+  return rows.some(r => r.name === column);
+}
+
+/**
+ * Idempotent ALTER TABLE ADD COLUMN that PRAGMA-checks first instead of
+ * relying on catching SQLite's "duplicate column" error string. Cleaner than
+ * tryAddColumn and friendlier to whatever error formatting future SQLite
+ * versions might pick.
+ */
+export async function addColumnIfMissing(
+  table: string,
+  column: string,
+  type: string,
+): Promise<void> {
+  if (await columnExists(table, column)) return;
+  assertSafeIdent(table, 'table');
+  assertSafeIdent(column, 'column');
+  const db = await getDb();
+  // `type` is constrained at call sites to a small literal set (TEXT /
+  // INTEGER / REAL); no untrusted input ever reaches here.
+  await db.execAsync(`ALTER TABLE ${table} ADD COLUMN ${column} ${type};`);
+}
+
+/**
+ * Creates an index only after confirming the underlying column exists. This
+ * is the safety net the original migration was missing — a CREATE INDEX
+ * fired in the same transaction as the schema, so an old DB without the
+ * column rolled the whole thing back.
+ */
+export async function createIndexIfColumnExists(
+  indexName: string,
+  table: string,
+  column: string,
+): Promise<void> {
+  if (!(await columnExists(table, column))) return;
+  assertSafeIdent(indexName, 'index');
+  assertSafeIdent(table, 'table');
+  assertSafeIdent(column, 'column');
+  const db = await getDb();
+  await db.execAsync(
+    `CREATE INDEX IF NOT EXISTS ${indexName} ON ${table}(${column});`,
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Migration entry point
+// ---------------------------------------------------------------------------
+
 async function runInit(): Promise<void> {
   const db = await getDb();
   await db.execAsync('PRAGMA foreign_keys = ON;');
-  // Run the schema in a transaction so a partial failure leaves the DB
-  // exactly as it was instead of in a half-migrated state.
+
+  // Phase 1: base CREATE TABLE / safe CREATE INDEX statements only.
+  // No statement here may reference a column that an existing install lacks.
   await db.withTransactionAsync(async () => {
     for (const stmt of SCHEMA_STATEMENTS) {
       await db.execAsync(stmt);
     }
   });
-  // Additive column upgrades for installs created against an older schema.
-  // SQLite has no "ADD COLUMN IF NOT EXISTS", so we attempt and swallow the
-  // "duplicate column" error.
-  await tryAddColumn('receipts', 'raw_ai_json', 'TEXT');
-  await tryAddColumn('receipts', 'parse_source', 'TEXT');
-  await tryAddColumn('items', 'barcode', 'TEXT');
-  await tryAddColumn('items', 'source', 'TEXT');
-  await tryAddColumn('items', 'raw_lookup_json', 'TEXT');
-  // Household scope columns. Idempotent — duplicate-column errors are
-  // swallowed so existing installs upgrade cleanly.
-  await tryAddColumn('items', 'household_id', 'INTEGER');
-  await tryAddColumn('inventory_events', 'household_id', 'INTEGER');
-  await tryAddColumn('inventory_events', 'created_by_member_id', 'INTEGER');
-  await tryAddColumn('inventory_events', 'created_by_device_id', 'INTEGER');
-  await tryAddColumn('receipts', 'household_id', 'INTEGER');
-  await tryAddColumn('receipts', 'created_by_member_id', 'INTEGER');
-  await tryAddColumn('receipts', 'created_by_device_id', 'INTEGER');
-  await tryAddColumn('receipt_items', 'household_id', 'INTEGER');
-  await tryAddColumn('ask_history', 'household_id', 'INTEGER');
-  await tryAddColumn('ask_history', 'created_by_member_id', 'INTEGER');
-  await tryAddColumn('ask_history', 'created_by_device_id', 'INTEGER');
-  await tryAddColumn('ask_feedback', 'household_id', 'INTEGER');
-  await tryAddColumn('ask_feedback', 'created_by_member_id', 'INTEGER');
-  await tryAddColumn('ask_feedback', 'created_by_device_id', 'INTEGER');
-  // Indexes are idempotent via IF NOT EXISTS — safe to re-run.
-  await db.execAsync(
-    'CREATE INDEX IF NOT EXISTS idx_items_barcode ON items(barcode);',
-  );
-  await db.execAsync(
-    'CREATE INDEX IF NOT EXISTS idx_items_household_id ON items(household_id);',
-  );
-  await db.execAsync(
-    'CREATE INDEX IF NOT EXISTS idx_inventory_events_household_id ON inventory_events(household_id);',
-  );
-  await db.execAsync(
-    'CREATE INDEX IF NOT EXISTS idx_receipts_household_id ON receipts(household_id);',
-  );
-  await db.execAsync(
-    'CREATE INDEX IF NOT EXISTS idx_ask_history_household_id ON ask_history(household_id);',
-  );
-  await db.execAsync(
-    'CREATE INDEX IF NOT EXISTS idx_ask_feedback_household_id ON ask_feedback(household_id);',
-  );
-}
 
-async function tryAddColumn(table: string, column: string, type: string): Promise<void> {
-  const db = await getDb();
-  try {
-    await db.execAsync(`ALTER TABLE ${table} ADD COLUMN ${column} ${type};`);
-  } catch (err) {
-    const message = err instanceof Error ? err.message.toLowerCase() : String(err);
-    if (message.includes('duplicate column')) return;
-    throw err;
-  }
+  // Phase 2: additive column upgrades. Pre-history columns first; household
+  // scope last. Each call is a no-op when the column already exists.
+  await addColumnIfMissing('receipts', 'raw_ai_json', 'TEXT');
+  await addColumnIfMissing('receipts', 'parse_source', 'TEXT');
+  await addColumnIfMissing('items', 'barcode', 'TEXT');
+  await addColumnIfMissing('items', 'source', 'TEXT');
+  await addColumnIfMissing('items', 'raw_lookup_json', 'TEXT');
+
+  await addColumnIfMissing('items', 'household_id', 'INTEGER');
+  await addColumnIfMissing('inventory_events', 'household_id', 'INTEGER');
+  await addColumnIfMissing('inventory_events', 'created_by_member_id', 'INTEGER');
+  await addColumnIfMissing('inventory_events', 'created_by_device_id', 'INTEGER');
+  await addColumnIfMissing('receipts', 'household_id', 'INTEGER');
+  await addColumnIfMissing('receipts', 'created_by_member_id', 'INTEGER');
+  await addColumnIfMissing('receipts', 'created_by_device_id', 'INTEGER');
+  await addColumnIfMissing('receipt_items', 'household_id', 'INTEGER');
+  await addColumnIfMissing('ask_history', 'household_id', 'INTEGER');
+  await addColumnIfMissing('ask_history', 'created_by_member_id', 'INTEGER');
+  await addColumnIfMissing('ask_history', 'created_by_device_id', 'INTEGER');
+  await addColumnIfMissing('ask_feedback', 'household_id', 'INTEGER');
+  await addColumnIfMissing('ask_feedback', 'created_by_member_id', 'INTEGER');
+  await addColumnIfMissing('ask_feedback', 'created_by_device_id', 'INTEGER');
+
+  // Phase 3: indexes that depend on the above columns. These were the
+  // landmines on existing installs — see schema.ts header comment.
+  await createIndexIfColumnExists('idx_items_barcode', 'items', 'barcode');
+  await createIndexIfColumnExists(
+    'idx_items_household_id',
+    'items',
+    'household_id',
+  );
+  await createIndexIfColumnExists(
+    'idx_inventory_events_household_id',
+    'inventory_events',
+    'household_id',
+  );
+  await createIndexIfColumnExists(
+    'idx_receipts_household_id',
+    'receipts',
+    'household_id',
+  );
+  await createIndexIfColumnExists(
+    'idx_ask_history_household_id',
+    'ask_history',
+    'household_id',
+  );
+  await createIndexIfColumnExists(
+    'idx_ask_feedback_household_id',
+    'ask_feedback',
+    'household_id',
+  );
 }
 
 /**
@@ -121,4 +195,13 @@ export async function resetDatabase(): Promise<void> {
 
 export function nowIso(): string {
   return new Date().toISOString();
+}
+
+/**
+ * Test-only seam. Lets jest re-run `initDatabase()` from a clean slate
+ * between test cases. NEVER call this from app code.
+ */
+export function __resetInitCacheForTests(): void {
+  initPromise = null;
+  dbPromise = null;
 }

@@ -5,6 +5,12 @@ export const SCHEMA_STATEMENTS: string[] = [
   // future cloud-sync layer can fan rows out by household without touching
   // UI code. Today the bootstrap creates a single "My Household" and
   // backfills all rows to it.
+  //
+  // IMPORTANT: indexes on `household_id` of pre-existing tables are NOT in
+  // this list. They live in `database.runInit()` and are created AFTER
+  // `addColumnIfMissing` ensures the column exists. Putting them here would
+  // run on existing installs (where CREATE TABLE IF NOT EXISTS is a no-op
+  // and the column doesn't exist yet) and crash the whole migration.
   // ---------------------------------------------------------------------------
   `CREATE TABLE IF NOT EXISTS households (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -55,7 +61,6 @@ export const SCHEMA_STATEMENTS: string[] = [
   `CREATE INDEX IF NOT EXISTS idx_items_canonical_key ON items(canonical_key);`,
   `CREATE INDEX IF NOT EXISTS idx_items_name ON items(name);`,
   `CREATE INDEX IF NOT EXISTS idx_items_barcode ON items(barcode);`,
-  `CREATE INDEX IF NOT EXISTS idx_items_household_id ON items(household_id);`,
   `CREATE TABLE IF NOT EXISTS inventory_events (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     item_id INTEGER NOT NULL,
@@ -72,7 +77,6 @@ export const SCHEMA_STATEMENTS: string[] = [
   );`,
   `CREATE INDEX IF NOT EXISTS idx_inventory_events_item_id ON inventory_events(item_id);`,
   `CREATE INDEX IF NOT EXISTS idx_inventory_events_created_at ON inventory_events(created_at);`,
-  `CREATE INDEX IF NOT EXISTS idx_inventory_events_household_id ON inventory_events(household_id);`,
   `CREATE TABLE IF NOT EXISTS receipts (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     store_name TEXT,
@@ -86,7 +90,6 @@ export const SCHEMA_STATEMENTS: string[] = [
     created_by_member_id INTEGER,
     created_by_device_id INTEGER
   );`,
-  `CREATE INDEX IF NOT EXISTS idx_receipts_household_id ON receipts(household_id);`,
   `CREATE TABLE IF NOT EXISTS receipt_items (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     receipt_id INTEGER NOT NULL,
@@ -109,7 +112,6 @@ export const SCHEMA_STATEMENTS: string[] = [
   );`,
   `CREATE INDEX IF NOT EXISTS idx_ask_history_normalized_term ON ask_history(normalized_term);`,
   `CREATE INDEX IF NOT EXISTS idx_ask_history_created_at ON ask_history(created_at);`,
-  `CREATE INDEX IF NOT EXISTS idx_ask_history_household_id ON ask_history(household_id);`,
   `CREATE TABLE IF NOT EXISTS ask_feedback (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     normalized_term TEXT NOT NULL,
@@ -122,5 +124,4 @@ export const SCHEMA_STATEMENTS: string[] = [
   );`,
   `CREATE INDEX IF NOT EXISTS idx_ask_feedback_normalized_term ON ask_feedback(normalized_term);`,
   `CREATE INDEX IF NOT EXISTS idx_ask_feedback_created_at ON ask_feedback(created_at);`,
-  `CREATE INDEX IF NOT EXISTS idx_ask_feedback_household_id ON ask_feedback(household_id);`,
 ];
