@@ -19,6 +19,17 @@ jobs:
     name: Direct APK
     runs-on: ubuntu-latest
     timeout-minutes: 60
+
+    # JOB-LEVEL env so every step (npm scripts, npx expo config, expo
+    # prebuild, gradle) sees the EXPO_PUBLIC_* values directly via
+    # process.env — independently of the .env file write below. This is
+    # the belt; the file is the braces.
+    env:
+      EXPO_PUBLIC_SUPABASE_URL: ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
+      EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
+      EXPO_PUBLIC_OPENAI_API_KEY: ${{ secrets.EXPO_PUBLIC_OPENAI_API_KEY }}
+      EXPO_PUBLIC_OPENAI_MODEL: ${{ secrets.EXPO_PUBLIC_OPENAI_MODEL }}
+
     steps:
       - name: Check out repo
         uses: actions/checkout@v4
@@ -62,36 +73,53 @@ jobs:
           echo "app_version=${APP_VERSION}" >> "$GITHUB_OUTPUT"
           echo "Building dwhi v${APP_VERSION} @ ${SHORT_SHA} (run #${GITHUB_RUN_NUMBER}) at ${BUILD_TIME}"
 
-      # Write build env to .env. `expo prebuild` and the Metro bundle Gradle
-      # invokes auto-load this file via Expo CLI, so the values end up
-      # inlined into the JS bundle AND copied into expoConfig.extra by
-      # app.config.js. File redirection only — secrets never hit step logs.
+      # Write every EXPO_PUBLIC_* var to .env so Expo CLI's auto-dotenv
+      # picks them up too (used by prebuild + Metro). The job-level env
+      # block above also exports them directly, so both paths agree.
+      # File redirection only — secrets never hit step logs; only their
+      # length / presence is echoed.
       - name: Write build-time .env from repo secrets + metadata
         env:
-          OPENAI_KEY: ${{ secrets.EXPO_PUBLIC_OPENAI_API_KEY }}
-          OPENAI_MODEL: ${{ secrets.EXPO_PUBLIC_OPENAI_MODEL }}
           BUILD_COMMIT: ${{ steps.meta.outputs.short_sha }}
           BUILD_RUN: ${{ github.run_number }}
           BUILD_TIME: ${{ steps.meta.outputs.build_time }}
         run: |
           umask 077
           {
-            if [ -n "${OPENAI_KEY}" ]; then
-              printf 'EXPO_PUBLIC_OPENAI_API_KEY=%s\n' "${OPENAI_KEY}"
+            if [ -n "${EXPO_PUBLIC_OPENAI_API_KEY}" ]; then
+              printf 'EXPO_PUBLIC_OPENAI_API_KEY=%s\n' "${EXPO_PUBLIC_OPENAI_API_KEY}"
             fi
-            if [ -n "${OPENAI_MODEL}" ]; then
-              printf 'EXPO_PUBLIC_OPENAI_MODEL=%s\n' "${OPENAI_MODEL}"
+            if [ -n "${EXPO_PUBLIC_OPENAI_MODEL}" ]; then
+              printf 'EXPO_PUBLIC_OPENAI_MODEL=%s\n' "${EXPO_PUBLIC_OPENAI_MODEL}"
+            fi
+            if [ -n "${EXPO_PUBLIC_SUPABASE_URL}" ]; then
+              printf 'EXPO_PUBLIC_SUPABASE_URL=%s\n' "${EXPO_PUBLIC_SUPABASE_URL}"
+            fi
+            if [ -n "${EXPO_PUBLIC_SUPABASE_ANON_KEY}" ]; then
+              printf 'EXPO_PUBLIC_SUPABASE_ANON_KEY=%s\n' "${EXPO_PUBLIC_SUPABASE_ANON_KEY}"
             fi
             printf 'EXPO_PUBLIC_BUILD_COMMIT=%s\n' "${BUILD_COMMIT}"
             printf 'EXPO_PUBLIC_BUILD_RUN=%s\n' "${BUILD_RUN}"
             printf 'EXPO_PUBLIC_BUILD_TIME=%s\n' "${BUILD_TIME}"
           } > .env
-          if [ -n "${OPENAI_KEY}" ]; then
-            echo "OpenAI key present: yes (length: ${#OPENAI_KEY})"
-          else
-            echo "::warning::OpenAI key empty/unset — APK will use the mock parser."
-          fi
-          echo "Build metadata: commit=${BUILD_COMMIT} run=${BUILD_RUN} time=${BUILD_TIME}"
+          # SAFE per-var diagnostic — presence + length only. Never the value.
+          echo "----- EXPO_PUBLIC_* presence -----"
+          for name in \
+            EXPO_PUBLIC_OPENAI_API_KEY \
+            EXPO_PUBLIC_OPENAI_MODEL \
+            EXPO_PUBLIC_SUPABASE_URL \
+            EXPO_PUBLIC_SUPABASE_ANON_KEY \
+            EXPO_PUBLIC_BUILD_COMMIT \
+            EXPO_PUBLIC_BUILD_RUN \
+            EXPO_PUBLIC_BUILD_TIME; do
+            val="$(printenv "$name" || true)"
+            if [ -n "$val" ]; then
+              echo "${name}: present (length ${#val})"
+            else
+              echo "::warning::${name}: missing"
+            fi
+          done
+          echo "----------------------------------"
 
       # Fail the build if the Jest suite is red. We run this before
       # typecheck/prebuild/Gradle so a logic regression doesn't waste
@@ -103,7 +131,14 @@ jobs:
         run: npx tsc --noEmit
 
       - name: Validate Expo config
-        run: npx expo config --type prebuild > /dev/null
+        # `expo config --type prebuild` triggers app.config.js evaluation,
+        # which is the surface that logs "[dwhi] Supabase configured: yes/no".
+        # Tailing the output makes the answer visible without dumping the
+        # whole config block.
+        run: |
+          set -e
+          npx expo config --type prebuild | grep -E '^\[dwhi\]' || true
+          npx expo config --type prebuild > /dev/null
 
       - name: Expo prebuild (Android only, clean)
         # --clean rebuilds android/ from scratch so a stale prebuild can't
@@ -131,4 +166,4 @@ jobs:
         if: always()
         run: |
           echo "::notice::APK artifact: dwhi-android-apk-${{ steps.meta.outputs.app_version }}-${{ steps.meta.outputs.short_sha }}"
-          echo "::warning::APK has OpenAI key inlined. Do not distribute. Rotate the key on https://platform.openai.com/api-keys when done testing."
+          echo "::warning::APK has OpenAI + Supabase keys inlined. Do not distribute. Rotate keys after testing."
