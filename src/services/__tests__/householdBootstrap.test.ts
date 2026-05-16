@@ -56,6 +56,9 @@ describe('bootstrapHousehold', () => {
 
   test('re-run on existing install: reuses existing rows + still backfills', async () => {
     getFirstAsync
+      // bootstrap now reads the app_prefs "active household" pref first;
+      // returning null falls back to the first-row lookup.
+      .mockResolvedValueOnce(null)
       .mockResolvedValueOnce({
         id: 7,
         name: 'My Household',

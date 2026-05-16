@@ -15,6 +15,7 @@ interface HouseholdRow {
   name: string;
   created_at: string;
   updated_at: string;
+  remote_id: string | null;
 }
 
 function rowToHousehold(row: HouseholdRow): Household {
@@ -23,6 +24,7 @@ function rowToHousehold(row: HouseholdRow): Household {
     name: row.name,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+    remoteId: row.remote_id,
   };
 }
 
@@ -34,21 +36,60 @@ export async function getFirstHousehold(): Promise<Household | null> {
   return row ? rowToHousehold(row) : null;
 }
 
-export async function createHousehold(name: string): Promise<Household> {
+export async function getHouseholdById(id: number): Promise<Household | null> {
+  const db = await getDb();
+  const row = await db.getFirstAsync<HouseholdRow>(
+    'SELECT * FROM households WHERE id = ? LIMIT 1;',
+    id,
+  );
+  return row ? rowToHousehold(row) : null;
+}
+
+export async function findHouseholdByRemoteId(
+  remoteId: string,
+): Promise<Household | null> {
+  if (!remoteId) return null;
+  const db = await getDb();
+  const row = await db.getFirstAsync<HouseholdRow>(
+    'SELECT * FROM households WHERE remote_id = ? LIMIT 1;',
+    remoteId,
+  );
+  return row ? rowToHousehold(row) : null;
+}
+
+export async function createHousehold(
+  name: string,
+  remoteId: string | null = null,
+): Promise<Household> {
   const db = await getDb();
   const now = nowIso();
   const result = await db.runAsync(
-    'INSERT INTO households (name, created_at, updated_at) VALUES (?, ?, ?);',
+    'INSERT INTO households (name, created_at, updated_at, remote_id) VALUES (?, ?, ?, ?);',
     name,
     now,
     now,
+    remoteId,
   );
   return {
     id: result.lastInsertRowId,
     name,
     createdAt: now,
     updatedAt: now,
+    remoteId,
   };
+}
+
+export async function setHouseholdRemoteId(
+  localId: number,
+  remoteId: string,
+): Promise<void> {
+  const db = await getDb();
+  await db.runAsync(
+    'UPDATE households SET remote_id = ?, updated_at = ? WHERE id = ?;',
+    remoteId,
+    nowIso(),
+    localId,
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -128,6 +169,8 @@ interface MemberRow {
   role: HouseholdRole;
   local_device_id: number | null;
   created_at: string;
+  remote_id: string | null;
+  remote_user_id: string | null;
 }
 
 function rowToMember(row: MemberRow): HouseholdMember {
@@ -138,6 +181,8 @@ function rowToMember(row: MemberRow): HouseholdMember {
     role: row.role,
     localDeviceId: row.local_device_id,
     createdAt: row.created_at,
+    remoteId: row.remote_id,
+    remoteUserId: row.remote_user_id,
   };
 }
 
@@ -157,17 +202,22 @@ export async function createMember(
   displayName: string,
   role: HouseholdRole,
   localDeviceId: number | null,
+  remoteId: string | null = null,
+  remoteUserId: string | null = null,
 ): Promise<HouseholdMember> {
   const db = await getDb();
   const now = nowIso();
   const result = await db.runAsync(
-    `INSERT INTO household_members (household_id, display_name, role, local_device_id, created_at)
-     VALUES (?, ?, ?, ?, ?);`,
+    `INSERT INTO household_members
+       (household_id, display_name, role, local_device_id, created_at, remote_id, remote_user_id)
+     VALUES (?, ?, ?, ?, ?, ?, ?);`,
     householdId,
     displayName,
     role,
     localDeviceId,
     now,
+    remoteId,
+    remoteUserId,
   );
   return {
     id: result.lastInsertRowId,
@@ -176,5 +226,7 @@ export async function createMember(
     role,
     localDeviceId,
     createdAt: now,
+    remoteId,
+    remoteUserId,
   };
 }

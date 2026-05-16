@@ -22,8 +22,10 @@ import {
   getFirstDeviceForHousehold,
   getFirstHousehold,
   getFirstMemberForHousehold,
+  getHouseholdById,
   touchDeviceLastSeen,
 } from '@/repositories/householdRepository';
+import { getActiveHouseholdPref } from '@/repositories/appPrefsRepository';
 import { setActiveHouseholdContext } from './householdContext';
 import type { ActiveHouseholdContext } from '@/types/models';
 
@@ -41,8 +43,12 @@ function randomUuidV4(): string {
 }
 
 export async function bootstrapHousehold(): Promise<ActiveHouseholdContext> {
-  // 1. Default household
-  let household = await getFirstHousehold();
+  // 1. Honor a previously chosen "active household" (e.g. one the user
+  //    accepted an invite into). Falls back to the first household row.
+  const preferredId = await getActiveHouseholdPref();
+  let household =
+    (preferredId !== null ? await getHouseholdById(preferredId) : null) ??
+    (await getFirstHousehold());
   if (!household) {
     household = await createHousehold(DEFAULT_HOUSEHOLD_NAME);
   }

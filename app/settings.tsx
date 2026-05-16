@@ -172,6 +172,22 @@ export default function SettingsScreen() {
                 <Row label="Last sync" value="—" tone="muted" />
               )}
               <Text style={styles.privacyBody}>{diag.cloudSync.description}</Text>
+
+              {diag.cloudSync.mode === 'configured-signed-out' ? (
+                <BigButton
+                  label="Sign in"
+                  variant="primary"
+                  onPress={() => router.push('/auth')}
+                />
+              ) : null}
+              {diag.cloudSync.mode === 'configured-signed-in' ? (
+                <BigButton
+                  label="Manage household"
+                  variant="secondary"
+                  onPress={() => router.push('/household')}
+                />
+              ) : null}
+
               <BigButton
                 label={syncing ? 'Syncing…' : 'Sync now'}
                 variant="secondary"

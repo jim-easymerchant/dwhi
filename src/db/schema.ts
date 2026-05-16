@@ -16,7 +16,8 @@ export const SCHEMA_STATEMENTS: string[] = [
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,
     created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL
+    updated_at TEXT NOT NULL,
+    remote_id TEXT
   );`,
   `CREATE TABLE IF NOT EXISTS household_members (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -25,6 +26,8 @@ export const SCHEMA_STATEMENTS: string[] = [
     role TEXT NOT NULL CHECK(role IN ('owner','member')),
     local_device_id INTEGER,
     created_at TEXT NOT NULL,
+    remote_id TEXT,
+    remote_user_id TEXT,
     FOREIGN KEY(household_id) REFERENCES households(id)
   );`,
   `CREATE INDEX IF NOT EXISTS idx_household_members_household_id ON household_members(household_id);`,
@@ -124,4 +127,13 @@ export const SCHEMA_STATEMENTS: string[] = [
   );`,
   `CREATE INDEX IF NOT EXISTS idx_ask_feedback_normalized_term ON ask_feedback(normalized_term);`,
   `CREATE INDEX IF NOT EXISTS idx_ask_feedback_created_at ON ask_feedback(created_at);`,
+
+  // Tiny key/value store for app preferences that don't deserve their own
+  // table. Used today for "which household is active" persistence across
+  // launches; future use: per-feature flags, last-sync cursors, etc.
+  `CREATE TABLE IF NOT EXISTS app_prefs (
+    key TEXT PRIMARY KEY,
+    value TEXT,
+    updated_at TEXT NOT NULL
+  );`,
 ];

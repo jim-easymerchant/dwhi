@@ -15,6 +15,7 @@ export interface Household {
   name: string;
   createdAt: string;
   updatedAt: string;
+  remoteId: string | null;
 }
 
 export interface HouseholdMember {
@@ -24,6 +25,8 @@ export interface HouseholdMember {
   role: HouseholdRole;
   localDeviceId: number | null;
   createdAt: string;
+  remoteId: string | null;
+  remoteUserId: string | null;
 }
 
 export interface Device {

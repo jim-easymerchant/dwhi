@@ -18,6 +18,7 @@
  */
 
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getSupabaseAnonKey, getSupabaseUrl, isSupabaseConfigured } from './env';
 
 let cached: SupabaseClient | null | undefined;
@@ -35,7 +36,11 @@ export function getSupabaseClient(): SupabaseClient | null {
   try {
     cached = createClient(url, anonKey, {
       auth: {
-        persistSession: false,
+        // React Native: AsyncStorage persists the session across cold
+        // starts so the invite flow can complete sign-in once and stay
+        // signed in until the user explicitly signs out.
+        storage: AsyncStorage,
+        persistSession: true,
         autoRefreshToken: true,
         detectSessionInUrl: false,
       },
@@ -54,7 +59,7 @@ export function describeSupabaseStatus(): string {
   if (!getSupabaseClient()) {
     return 'Supabase env vars set but client failed to initialize.';
   }
-  return 'Supabase client ready. Sign-in is required for the next branch to enable Sync now.';
+  return 'Supabase client ready. Sign in to manage household invites and members.';
 }
 
 /** Test-only reset; never call from app code. */
