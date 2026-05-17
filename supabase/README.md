@@ -43,8 +43,12 @@ Open **Settings → Cloud sync**. The mode should read
 ## Email OTP setup (REQUIRED for mobile auth)
 
 The app uses `signInWithOtp` + `verifyOtp({ type: 'email' })`. The user
-should receive a **6-digit code** in their email and type it into the
-app. **Supabase's default email templates only render a magic link** —
+should receive a **numeric sign-in code** in their email and type it
+into the app. Supabase projects can be configured for **6, 8, or up to
+10** digits via Auth → Providers → Email → "One Time Password length".
+The mobile app accepts any digit run between 4 and 12, normalizes
+whitespace/hyphens out of the paste, and never truncates the token.
+**Supabase's default email templates only render a magic link** —
 on a mobile-only build that link redirects to `localhost:3000` (Site URL)
 and is useless. You have to update the templates.
 
@@ -72,7 +76,7 @@ Replace it with something like:
 
 ```html
 <h2>Your sign-in code</h2>
-<p>Enter this 6-digit code in the app to sign in:</p>
+<p>Enter this sign-in code in the app:</p>
 <p style="font-size: 32px; letter-spacing: 8px; font-family: monospace;">
   {{ .Token }}
 </p>
@@ -91,7 +95,7 @@ first `signInWithOtp` call. Same fix — add `{{ .Token }}` to the body:
 
 ```html
 <h2>Confirm your email</h2>
-<p>Enter this 6-digit code in the app:</p>
+<p>Enter this sign-in code in the app:</p>
 <p style="font-size: 32px; letter-spacing: 8px; font-family: monospace;">
   {{ .Token }}
 </p>
@@ -116,9 +120,11 @@ through the Magic Link template.
 
 ### 5. Verify
 
-Send yourself an OTP from the app. The email should contain the
-6-digit code. Pasting that code into the app should sign you in. If
-you see only a link in the email, step 1 or 2 above wasn't applied.
+Send yourself an OTP from the app. The email should contain a numeric
+sign-in code (length matches the project's "One Time Password length"
+setting — typically 6 or 8). Pasting that code into the app should
+sign you in. If you see only a link in the email, step 1 or 2 above
+wasn't applied.
 
 ## RLS policy summary
 

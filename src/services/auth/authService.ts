@@ -97,13 +97,18 @@ function looksLikeInvalidToken(messageOrCode: {
 }
 
 /**
- * Triggers Supabase to email a 6-digit code to the given address. Creates
- * the auth user if they don't exist yet (shouldCreateUser=true).
+ * Triggers Supabase to email a numeric sign-in code to the given address.
+ * Creates the auth user if they don't exist yet (shouldCreateUser=true).
  *
  * We deliberately do NOT pass `emailRedirectTo` — on mobile we never want
  * the user clicking a link; we want them reading the code out of the email
  * and pasting it into the app. The token shows up in the email iff the
  * Supabase email template includes `{{ .Token }}` (see supabase/README.md).
+ *
+ * Token length is project-dependent: Supabase historically emitted 6
+ * digits, but newer projects can be configured for 8 (or more). The app
+ * deliberately does not assume a specific length — see
+ * OTP_CODE_MIN_LENGTH / OTP_CODE_MAX_LENGTH below.
  */
 export async function requestEmailOtp(email: string): Promise<AuthResult> {
   const client = getSupabaseClient();
@@ -133,27 +138,41 @@ export async function requestEmailOtp(email: string): Promise<AuthResult> {
   return {
     ok: true,
     message:
-      'We sent a 6-digit code to your email. Open the email and copy the code (not the link).',
+      'We sent a sign-in code to your email. Open the email and copy the code (not the link).',
   };
 }
 
-export const OTP_CODE_LENGTH = 6;
+/**
+ * Accept any reasonable numeric token length. Supabase emits 6 or 8
+ * digits depending on project configuration, and the dashboard lets
+ * operators set it as wide as 10. We cap at 12 to bound the input
+ * field without rejecting realistic codes.
+ */
+export const OTP_CODE_MIN_LENGTH = 4;
+export const OTP_CODE_MAX_LENGTH = 12;
 
 /**
- * Normalize a user-typed code: strip whitespace, then drop anything
- * that isn't a digit. The 6-digit Supabase token is always all-digits,
- * so a paste from email that grabbed surrounding spaces or a hyphen
- * still ends up valid.
+ * Normalize a user-typed code: drop everything that isn't a digit so a
+ * paste like `"4087-7161"` or `"4087 7161"` arrives at Supabase as the
+ * intended `"40877161"`. Never truncates — the full digit run is sent.
  */
 export function normalizeOtpCode(raw: string): string {
   return raw.replace(/\D+/g, '');
 }
 
+/** True iff the normalized code length is within the accepted range. */
+export function isOtpCodeLengthValid(normalized: string): boolean {
+  return (
+    normalized.length >= OTP_CODE_MIN_LENGTH &&
+    normalized.length <= OTP_CODE_MAX_LENGTH
+  );
+}
+
 /**
- * Verifies the 6-digit code. Two phases:
+ * Verifies the sign-in code. Three phases:
  *
- *   1. Validate locally first: empty, length wrong → short-circuit with
- *      a friendly message; never hit Supabase with obvious garbage.
+ *   1. Validate locally first: empty, length out of range → short-circuit
+ *      with a friendly message; never hit Supabase with obvious garbage.
  *   2. Call `verifyOtp({ type: 'email' })`. If that fails with what
  *      looks like an Invalid/Expired token error, do ONE retry with
  *      `type: 'signup'` to cover the first-sign-in case where the
@@ -164,10 +183,9 @@ export function normalizeOtpCode(raw: string): string {
  *      writes through AsyncStorage on verify, so a missing session at
  *      this point is a real failure, not a race.
  *
- * `type: 'email'` is the OTP-code path; `type: 'magiclink'` is the
- * link-redirect path (we never use it). `type: 'signup'` is the same
- * shape as 'email' but only matches tokens issued by the Confirm
- * Signup template.
+ * The exact normalized digit run is passed to `verifyOtp` — no
+ * truncation, no slicing. That's the bug this function specifically
+ * guards against.
  */
 export async function verifyEmailOtp(
   email: string,
@@ -183,13 +201,15 @@ export async function verifyEmailOtp(
   if (!normalizedCode) {
     return {
       ok: false,
-      message: 'Enter the 6-digit code from your email.',
+      message: 'Enter the sign-in code from your email.',
     };
   }
-  if (normalizedCode.length !== OTP_CODE_LENGTH) {
+  // Safe diagnostic: length only, never the token itself.
+  console.log(`[dwhi.auth] normalized OTP length: ${normalizedCode.length}`);
+  if (!isOtpCodeLengthValid(normalizedCode)) {
     return {
       ok: false,
-      message: 'Enter the 6-digit code from your email.',
+      message: 'Enter the sign-in code from your email.',
     };
   }
 

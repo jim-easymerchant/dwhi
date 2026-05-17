@@ -15,8 +15,9 @@ import { BigButton } from '@/components/BigButton';
 import { Card } from '@/components/Card';
 import {
   getCurrentSession,
+  isOtpCodeLengthValid,
   normalizeOtpCode,
-  OTP_CODE_LENGTH,
+  OTP_CODE_MAX_LENGTH,
   requestEmailOtp,
   verifyEmailOtp,
 } from '@/services/auth/authService';
@@ -71,11 +72,14 @@ export default function AuthScreen() {
   const verifyCode = async () => {
     if (busy) return;
     // Local validation first so we never burn an OTP attempt on the
-    // server for obviously-wrong input.
+    // server for obviously-wrong input. Length is intentionally
+    // flexible — Supabase projects can be configured for 6, 8, or
+    // more digits, and truncating here is exactly how this broke
+    // in production.
     const normalized = normalizeOtpCode(code);
-    if (normalized.length !== OTP_CODE_LENGTH) {
+    if (!isOtpCodeLengthValid(normalized)) {
       setMessage(null);
-      setError('Enter the 6-digit code from your email.');
+      setError('Enter the sign-in code from your email.');
       return;
     }
 
@@ -119,7 +123,7 @@ export default function AuthScreen() {
           <Text style={styles.heading}>Sign in</Text>
           <Text style={styles.body}>
             Sign in with email to create or join a household. We send a
-            6-digit code by email — no password, no link to click.
+            sign-in code by email — no password, no link to click.
           </Text>
 
           {phase === 'email' ? (
@@ -146,7 +150,7 @@ export default function AuthScreen() {
             <Card style={styles.card}>
               <Text style={styles.body}>
                 Code sent to {email}. Open the email and{' '}
-                <Text style={styles.bodyEmphasis}>type the 6-digit code below</Text>
+                <Text style={styles.bodyEmphasis}>type the numeric code below</Text>
                 . Don't tap the link — it's only useful in a browser, not on this device.
               </Text>
               {error ? (
@@ -155,24 +159,26 @@ export default function AuthScreen() {
                 </Text>
               ) : null}
               <TextField
-                label="6-digit code"
+                label="Sign-in code"
                 value={code}
                 onChangeText={text => {
                   // Strip non-digits inline so the input never holds
                   // garbage that would later fail validation silently.
+                  // We never truncate — the full digit run is preserved
+                  // so 6-, 8-, or 10-digit project configs all work.
                   const cleaned = normalizeOtpCode(text);
                   setCode(cleaned);
                   if (error) setError(null);
                 }}
                 keyboardType="number-pad"
                 autoComplete="one-time-code"
-                placeholder="123456"
-                maxLength={OTP_CODE_LENGTH}
+                placeholder="12345678"
+                maxLength={OTP_CODE_MAX_LENGTH}
               />
               <BigButton
                 label={busy ? 'Verifying…' : 'Verify'}
                 onPress={verifyCode}
-                disabled={busy || normalizeOtpCode(code).length !== OTP_CODE_LENGTH}
+                disabled={busy || !isOtpCodeLengthValid(normalizeOtpCode(code))}
               />
               <BigButton
                 label="Use a different email"
