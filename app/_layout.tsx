@@ -11,6 +11,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { initDatabase } from '@/db/database';
 import { seedIfEmpty } from '@/seed/seedData';
 import { bootstrapHousehold } from '@/services/householdBootstrap';
+import { ensureRemoteHousehold } from '@/services/household/remoteHouseholdBootstrap';
 import { colors } from '@/theme/colors';
 
 export default function RootLayout() {
@@ -26,6 +27,17 @@ export default function RootLayout() {
       // Backfills any pre-existing rows from earlier installs.
       await bootstrapHousehold();
       await seedIfEmpty();
+      // If a Supabase session survived a cold start, converge the
+      // local household state with the server. expectAuthenticated:
+      // false means "local-only mode is fine if there's no session" —
+      // never blocks startup. A real failure (network, RLS surprise)
+      // is logged but not surfaced as a startup error.
+      const remote = await ensureRemoteHousehold();
+      if (!remote.ok) {
+        console.warn(
+          `[dwhi.household] cold-start remote bootstrap deferred: ${remote.message}`,
+        );
+      }
       setReady(true);
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);

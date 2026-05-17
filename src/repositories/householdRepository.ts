@@ -230,3 +230,60 @@ export async function createMember(
     remoteUserId,
   };
 }
+
+/**
+ * Stamp the Supabase ids on an existing local member row. Used after
+ * `ensureRemoteHousehold` so the owner row created during the local-only
+ * bootstrap now knows about its remote counterpart.
+ */
+export async function setMemberRemoteIds(
+  localMemberId: number,
+  remoteId: string | null,
+  remoteUserId: string | null,
+): Promise<void> {
+  const db = await getDb();
+  await db.runAsync(
+    `UPDATE household_members
+        SET remote_id = ?, remote_user_id = ?
+      WHERE id = ?;`,
+    remoteId,
+    remoteUserId,
+    localMemberId,
+  );
+}
+
+/**
+ * Updates the role of an existing local member row. Used when the remote
+ * source of truth disagrees with the local default (e.g. user accepted an
+ * invite as 'member' but the local row was bootstrapped as 'owner').
+ */
+export async function updateMemberRole(
+  localMemberId: number,
+  role: HouseholdRole,
+): Promise<void> {
+  const db = await getDb();
+  await db.runAsync(
+    'UPDATE household_members SET role = ? WHERE id = ?;',
+    role,
+    localMemberId,
+  );
+}
+
+/**
+ * Find the local member row for the active household whose remote_user_id
+ * matches a Supabase auth.uid(). Returns null if no such row exists.
+ */
+export async function findMemberByRemoteUserId(
+  householdId: number,
+  remoteUserId: string,
+): Promise<HouseholdMember | null> {
+  const db = await getDb();
+  const row = await db.getFirstAsync<MemberRow>(
+    `SELECT * FROM household_members
+      WHERE household_id = ? AND remote_user_id = ?
+      LIMIT 1;`,
+    householdId,
+    remoteUserId,
+  );
+  return row ? rowToMember(row) : null;
+}

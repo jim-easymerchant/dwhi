@@ -21,6 +21,7 @@ import {
   requestEmailOtp,
   verifyEmailOtp,
 } from '@/services/auth/authService';
+import { ensureRemoteHousehold } from '@/services/household/remoteHouseholdBootstrap';
 import { isSupabaseConfigured } from '@/services/env';
 import { colors, spacing, typography } from '@/theme/colors';
 
@@ -102,6 +103,20 @@ export default function AuthScreen() {
       if (!session) {
         setError(
           'Verified but no session is active. Please request a new code and try again.',
+        );
+        return;
+      }
+      // Now that we have a confirmed session, converge local + remote
+      // household state. Brand-new users get a remote household
+      // provisioned automatically; returning users get linked to their
+      // existing one. Failures are surfaced verbatim so the user can
+      // retry from Settings rather than landing on a broken "linked
+      // remotely: no" screen with no explanation.
+      const linked = await ensureRemoteHousehold({ expectAuthenticated: true });
+      if (!linked.ok) {
+        setError(
+          linked.message ||
+            'Signed in, but could not link a remote household. Try again from Settings.',
         );
         return;
       }
