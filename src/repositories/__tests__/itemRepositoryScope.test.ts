@@ -71,7 +71,7 @@ describe('itemRepository scoping', () => {
     expect(hh).toBe(42);
   });
 
-  test('createItem stamps the active household id as the last arg', async () => {
+  test('createItem stamps the active household id and a sync_status', async () => {
     runAsync.mockResolvedValue({ lastInsertRowId: 99 });
     await createItem({
       manufacturer: null,
@@ -85,8 +85,14 @@ describe('itemRepository scoping', () => {
       rawLookupJson: null,
     });
     const args = runAsync.mock.calls[0];
-    // INSERT signature: ..., now, now, household_id (last)
-    expect(args[args.length - 1]).toBe(42);
+    // INSERT signature now ends: ..., updated_at, household_id, sync_status.
+    // Household id sits at length-2; sync_status is the final arg.
+    expect(args[args.length - 2]).toBe(42);
+    // Sync defaults to 'local_only' in tests because the context fixture
+    // doesn't set a remoteId; sync_status only flips to 'pending_push'
+    // once ensureRemoteHousehold links the local household.
+    expect(args[args.length - 1]).toBe('local_only');
     expect(args[0]).toContain('household_id');
+    expect(args[0]).toContain('sync_status');
   });
 });

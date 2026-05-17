@@ -1,5 +1,8 @@
 import { getDb, nowIso } from '@/db/database';
 import { getActiveHouseholdId } from '@/services/householdContext';
+import { requestAutoSync } from '@/services/sync/autoSync';
+import { nextSyncStatusForLocalWrite } from '@/services/sync/syncRowStatus';
+import type { SyncRowStatus } from '@/services/sync/syncTypes';
 import type { Item, NewItem } from '@/types/models';
 
 interface ItemRow {
@@ -16,6 +19,12 @@ interface ItemRow {
   created_at: string;
   updated_at: string;
   household_id: number | null;
+  remote_id: string | null;
+  sync_status: string | null;
+  remote_updated_at: string | null;
+  last_synced_at: string | null;
+  sync_error: string | null;
+  deleted_at: string | null;
 }
 
 function rowToItem(row: ItemRow): Item {
@@ -33,6 +42,32 @@ function rowToItem(row: ItemRow): Item {
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     householdId: row.household_id,
+  };
+}
+
+/**
+ * Internal row shape including the sync columns. The sync layer needs
+ * these; the rest of the app uses the slimmer `Item` shape via
+ * `rowToItem`. Kept in this file so callers don't reach into raw SQL.
+ */
+export interface ItemWithSyncMeta extends Item {
+  remoteId: string | null;
+  syncStatus: SyncRowStatus | null;
+  remoteUpdatedAt: string | null;
+  lastSyncedAt: string | null;
+  syncError: string | null;
+  deletedAt: string | null;
+}
+
+function rowToItemWithSyncMeta(row: ItemRow): ItemWithSyncMeta {
+  return {
+    ...rowToItem(row),
+    remoteId: row.remote_id,
+    syncStatus: (row.sync_status as SyncRowStatus | null) ?? null,
+    remoteUpdatedAt: row.remote_updated_at,
+    lastSyncedAt: row.last_synced_at,
+    syncError: row.sync_error,
+    deletedAt: row.deleted_at,
   };
 }
 
@@ -111,11 +146,13 @@ export async function createItem(input: NewItem): Promise<Item> {
   const canonicalKey =
     input.canonicalKey ?? toCanonicalKey(input.name, input.manufacturer ?? undefined);
   const householdId = getActiveHouseholdId();
+  const syncStatus = nextSyncStatusForLocalWrite();
   const result = await db.runAsync(
     `INSERT INTO items
        (manufacturer, name, category, container_type, size, canonical_key,
-        barcode, source, raw_lookup_json, created_at, updated_at, household_id)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
+        barcode, source, raw_lookup_json, created_at, updated_at, household_id,
+        sync_status)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
     input.manufacturer,
     input.name,
     input.category,
@@ -128,7 +165,11 @@ export async function createItem(input: NewItem): Promise<Item> {
     now,
     now,
     householdId,
+    syncStatus,
   );
+  // Fire-and-forget sync request; debounced + de-duped inside autoSync
+  // so back-to-back writes don't stack push attempts.
+  requestAutoSync('item-write');
   return {
     id: result.lastInsertRowId,
     manufacturer: input.manufacturer,
@@ -167,6 +208,7 @@ export async function upsertItem(input: NewItem): Promise<Item> {
   if (existing) {
     const db = await getDb();
     const now = nowIso();
+    const syncStatus = nextSyncStatusForLocalWrite();
     await db.runAsync(
       `UPDATE items
          SET manufacturer = COALESCE(?, manufacturer),
@@ -176,7 +218,8 @@ export async function upsertItem(input: NewItem): Promise<Item> {
              barcode = COALESCE(?, barcode),
              source = COALESCE(?, source),
              raw_lookup_json = COALESCE(?, raw_lookup_json),
-             updated_at = ?
+             updated_at = ?,
+             sync_status = ?
        WHERE id = ? AND household_id = ?;`,
       input.manufacturer,
       input.category,
@@ -186,9 +229,11 @@ export async function upsertItem(input: NewItem): Promise<Item> {
       input.source ?? null,
       input.rawLookupJson ?? null,
       now,
+      syncStatus,
       existing.id,
       getActiveHouseholdId(),
     );
+    requestAutoSync('item-write');
     return {
       ...existing,
       manufacturer: input.manufacturer ?? existing.manufacturer,
@@ -203,4 +248,169 @@ export async function upsertItem(input: NewItem): Promise<Item> {
     };
   }
   return createItem({ ...input, canonicalKey });
+}
+
+// ---------------------------------------------------------------------------
+// Sync support: the outbound/inbound sync layer reaches in through these
+// dedicated functions rather than building SQL directly, so the schema
+// shape stays encapsulated in this repository.
+// ---------------------------------------------------------------------------
+
+/**
+ * Returns items that need to be pushed to Supabase: anything currently
+ * `pending_push` or `sync_failed` (retry path), scoped to the active
+ * household. Includes soft-deleted rows so the server learns about
+ * tombstones too.
+ */
+export async function listItemsPendingPush(
+  limit = 200,
+): Promise<ItemWithSyncMeta[]> {
+  const db = await getDb();
+  const rows = await db.getAllAsync<ItemRow>(
+    `SELECT * FROM items
+      WHERE household_id = ?
+        AND sync_status IN ('pending_push', 'sync_failed')
+      ORDER BY updated_at ASC
+      LIMIT ?;`,
+    getActiveHouseholdId(),
+    limit,
+  );
+  return rows.map(rowToItemWithSyncMeta);
+}
+
+/** Looks up the item with the given remote_id, regardless of soft-delete. */
+export async function findItemByRemoteId(
+  remoteId: string,
+): Promise<ItemWithSyncMeta | null> {
+  const db = await getDb();
+  const row = await db.getFirstAsync<ItemRow>(
+    `SELECT * FROM items WHERE household_id = ? AND remote_id = ? LIMIT 1;`,
+    getActiveHouseholdId(),
+    remoteId,
+  );
+  return row ? rowToItemWithSyncMeta(row) : null;
+}
+
+/**
+ * Stamp the push outcome on a local item row. `remoteId`/`remoteUpdatedAt`
+ * are set on success; `error` only when status is sync_failed.
+ */
+export async function markItemPushResult(input: {
+  localId: number;
+  status: SyncRowStatus;
+  remoteId?: string | null;
+  remoteUpdatedAt?: string | null;
+  error?: string | null;
+}): Promise<void> {
+  const db = await getDb();
+  const now = nowIso();
+  if (input.status === 'synced') {
+    await db.runAsync(
+      `UPDATE items
+          SET sync_status = 'synced',
+              remote_id = COALESCE(?, remote_id),
+              remote_updated_at = ?,
+              last_synced_at = ?,
+              sync_error = NULL
+        WHERE id = ?;`,
+      input.remoteId ?? null,
+      input.remoteUpdatedAt ?? now,
+      now,
+      input.localId,
+    );
+  } else {
+    await db.runAsync(
+      `UPDATE items
+          SET sync_status = ?,
+              sync_error = ?
+        WHERE id = ?;`,
+      input.status,
+      truncateError(input.error ?? null),
+      input.localId,
+    );
+  }
+}
+
+/**
+ * INSERT a remote row that doesn't exist locally yet. Used by the
+ * inbound pull when a brand-new item shows up from another device.
+ * Returns the new local id.
+ */
+export async function insertRemoteItemLocally(input: {
+  remoteId: string;
+  localIdHint: string | null;
+  name: string;
+  category: string | null;
+  barcode: string | null;
+  createdAt: string;
+  updatedAt: string;
+  remoteUpdatedAt: string;
+  deletedAt: string | null;
+}): Promise<number> {
+  const db = await getDb();
+  const householdId = getActiveHouseholdId();
+  const canonicalKey = toCanonicalKey(input.name);
+  const result = await db.runAsync(
+    `INSERT INTO items
+       (name, category, barcode, canonical_key, created_at, updated_at,
+        household_id, remote_id, sync_status, remote_updated_at,
+        last_synced_at, deleted_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'synced', ?, ?, ?);`,
+    input.name,
+    input.category,
+    input.barcode,
+    canonicalKey,
+    input.createdAt,
+    input.updatedAt,
+    householdId,
+    input.remoteId,
+    input.remoteUpdatedAt,
+    nowIso(),
+    input.deletedAt,
+  );
+  return result.lastInsertRowId;
+}
+
+/**
+ * UPDATE an existing local row with values from the remote. Skipped by
+ * the inbound pull when the local row has unsynced changes.
+ */
+export async function applyRemoteItemUpdate(input: {
+  localId: number;
+  name: string;
+  category: string | null;
+  barcode: string | null;
+  updatedAt: string;
+  remoteUpdatedAt: string;
+  deletedAt: string | null;
+}): Promise<void> {
+  const db = await getDb();
+  await db.runAsync(
+    `UPDATE items
+        SET name = ?,
+            category = ?,
+            barcode = ?,
+            canonical_key = ?,
+            updated_at = ?,
+            remote_updated_at = ?,
+            sync_status = 'synced',
+            last_synced_at = ?,
+            sync_error = NULL,
+            deleted_at = ?
+      WHERE id = ?;`,
+    input.name,
+    input.category,
+    input.barcode,
+    toCanonicalKey(input.name),
+    input.updatedAt,
+    input.remoteUpdatedAt,
+    nowIso(),
+    input.deletedAt,
+    input.localId,
+  );
+}
+
+function truncateError(msg: string | null): string | null {
+  if (!msg) return null;
+  return msg.length > 240 ? `${msg.slice(0, 240)}…` : msg;
 }

@@ -228,13 +228,27 @@ export default function SettingsScreen() {
               />
               {lastSync ? (
                 <Row
-                  label="Last sync"
+                  label="This run"
                   value={`${lastSync.message} (${new Date(lastSync.finishedAt).toLocaleTimeString()})`}
                   tone={lastSync.ok ? 'good' : 'warn'}
                 />
-              ) : (
-                <Row label="Last sync" value="—" tone="muted" />
-              )}
+              ) : null}
+              <Row
+                label="Last sync"
+                value={
+                  diag.cloudSync.lastSyncAt
+                    ? new Date(diag.cloudSync.lastSyncAt).toLocaleString()
+                    : '—'
+                }
+                tone={diag.cloudSync.lastSyncAt ? 'good' : 'muted'}
+              />
+              {diag.cloudSync.lastSyncError ? (
+                <Row
+                  label="Last error"
+                  value={diag.cloudSync.lastSyncError}
+                  tone="warn"
+                />
+              ) : null}
               <Text style={styles.privacyBody}>{diag.cloudSync.description}</Text>
 
               {diag.cloudSync.mode === 'configured-signed-out' ? (

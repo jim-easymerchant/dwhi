@@ -5,7 +5,19 @@
  * when the real sync logic lands.
  */
 
-export type SyncRowStatus = 'pending' | 'synced' | 'error';
+/**
+ * Per-row sync state machine for items + inventory_events:
+ *   local_only    — no remote household linked yet (or sync disabled).
+ *                   Row lives entirely on this device.
+ *   pending_push  — row has local changes that need to be pushed.
+ *   synced        — row is in sync with the remote.
+ *   sync_failed   — last push attempt failed; sync_error is set.
+ */
+export type SyncRowStatus =
+  | 'local_only'
+  | 'pending_push'
+  | 'synced'
+  | 'sync_failed';
 
 /**
  * What mode the sync subsystem is in, end-to-end. Order matches the
@@ -35,3 +47,10 @@ export interface SyncResult {
   /** When this run finished (ISO). */
   finishedAt: string;
 }
+
+/**
+ * Persisted in `app_prefs` so Settings can show "last sync ran at X"
+ * across app restarts without a separate database table.
+ */
+export const LAST_SYNC_AT_KEY = 'sync.last_run_at';
+export const LAST_SYNC_ERROR_KEY = 'sync.last_error';

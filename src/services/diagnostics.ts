@@ -14,7 +14,11 @@ import { countAll as countAllFeedback } from '@/repositories/askFeedbackReposito
 import { countLearnedPatterns } from './behaviorStats';
 import { speechService } from './voice/speechService';
 import { getActiveContextOrNull } from './householdContext';
-import { countPendingChanges, getSyncMode } from './sync/syncStatus';
+import {
+  countPendingChanges,
+  getLastSyncInfo,
+  getSyncMode,
+} from './sync/syncStatus';
 import { describeSupabaseStatus } from './supabaseClient';
 import type { SyncMode } from './sync/syncTypes';
 import {
@@ -62,6 +66,10 @@ export interface Diagnostics {
     description: string;
     pendingChangesTotal: number;
     pendingByTable: Record<string, number>;
+    /** ISO timestamp of the most recent syncNow() that returned. */
+    lastSyncAt: string | null;
+    /** Most recent sync error, if the last run had errors. */
+    lastSyncError: string | null;
   };
   location: {
     enabled: boolean;
@@ -165,6 +173,8 @@ async function buildLocationDiagnostic(): Promise<Diagnostics['location']> {
 
 async function buildCloudSyncDiagnostic(): Promise<Diagnostics['cloudSync']> {
   let mode: SyncMode = 'local-only';
+  let lastSyncAt: string | null = null;
+  let lastSyncError: string | null = null;
   let pending: { total: number; byTable: Record<string, number> } = {
     total: 0,
     byTable: {},
@@ -172,6 +182,9 @@ async function buildCloudSyncDiagnostic(): Promise<Diagnostics['cloudSync']> {
   try {
     mode = await getSyncMode();
     pending = await countPendingChanges();
+    const last = await getLastSyncInfo();
+    lastSyncAt = last.at;
+    lastSyncError = last.error;
   } catch (e) {
     console.warn('[dwhi] cloud-sync diagnostics failed:', e);
   }
@@ -180,6 +193,8 @@ async function buildCloudSyncDiagnostic(): Promise<Diagnostics['cloudSync']> {
     description: describeSupabaseStatus(),
     pendingChangesTotal: pending.total,
     pendingByTable: pending.byTable,
+    lastSyncAt,
+    lastSyncError,
   };
 }
 

@@ -171,6 +171,34 @@ async function runInit(): Promise<void> {
     await addColumnIfMissing(table, 'updated_at', 'TEXT');
   }
 
+  // Phase 1 sync columns. The cross-table additions above cover the
+  // basics; these are specific to the items + inventory_events push/pull
+  // pipeline:
+  //   remote_updated_at — what the server thinks updated_at is. Used as
+  //                       the conflict-resolution side of last-write-wins.
+  //   sync_error        — most recent push error message (truncated by
+  //                       writers). Surfaced in Settings.
+  //   inventory_events.remote_item_id — the items.remote_id for the row
+  //                       this event is attached to. Carried as a hint so
+  //                       outbound doesn't need to JOIN at push time
+  //                       against a possibly-changing items row.
+  for (const table of ['items', 'inventory_events']) {
+    await addColumnIfMissing(table, 'remote_updated_at', 'TEXT');
+    await addColumnIfMissing(table, 'sync_error', 'TEXT');
+  }
+  await addColumnIfMissing('inventory_events', 'remote_item_id', 'TEXT');
+
+  // Backfill: rows created before sync metadata existed should be
+  // explicitly local_only so the pending-count scans don't have to
+  // special-case NULL.
+  const db2 = await getDb();
+  await db2.execAsync(
+    `UPDATE items SET sync_status = 'local_only' WHERE sync_status IS NULL;`,
+  );
+  await db2.execAsync(
+    `UPDATE inventory_events SET sync_status = 'local_only' WHERE sync_status IS NULL;`,
+  );
+
   // Phase 3: indexes that depend on the above columns. These were the
   // landmines on existing installs — see schema.ts header comment.
   await createIndexIfColumnExists('idx_items_barcode', 'items', 'barcode');

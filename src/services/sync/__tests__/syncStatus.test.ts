@@ -24,7 +24,14 @@ jest.mock('@/services/supabaseClient', () => ({
   getSupabaseClient: () => getSupabaseClient(),
 }));
 
-import { countPendingChanges, getSyncMode } from '../syncStatus';
+const getPref: jest.Mock<Promise<string | null>, [string]> = jest.fn(
+  async (_key: string) => null,
+);
+jest.mock('@/repositories/appPrefsRepository', () => ({
+  getPref: (key: string) => getPref(key),
+}));
+
+import { countPendingChanges, getLastSyncInfo, getSyncMode } from '../syncStatus';
 
 beforeEach(() => {
   jest.clearAllMocks();
@@ -65,6 +72,37 @@ describe('countPendingChanges', () => {
     // 5 tables × 2 pending each
     expect(result.total).toBe(10);
     expect(getFirstAsync).toHaveBeenCalledTimes(5);
+  });
+
+  test('counts pending_push AND sync_failed (so retry rows surface)', async () => {
+    columnExists.mockResolvedValue(true);
+    getFirstAsync.mockResolvedValue({ c: 0 });
+    await countPendingChanges();
+    // Every per-table SELECT should mention both statuses.
+    for (const call of getFirstAsync.mock.calls) {
+      const sql = String(call[0]);
+      expect(sql).toContain("'pending_push'");
+      expect(sql).toContain("'sync_failed'");
+    }
+  });
+});
+
+describe('getLastSyncInfo', () => {
+  test('reads both prefs and returns them', async () => {
+    getPref.mockImplementation(async (key: string) => {
+      if (key === 'sync.last_run_at') return '2026-05-17T12:00:00Z';
+      if (key === 'sync.last_error') return 'permission denied';
+      return null;
+    });
+    const r = await getLastSyncInfo();
+    expect(r.at).toBe('2026-05-17T12:00:00Z');
+    expect(r.error).toBe('permission denied');
+  });
+
+  test('returns nulls when no run has happened yet', async () => {
+    getPref.mockResolvedValue(null);
+    const r = await getLastSyncInfo();
+    expect(r).toEqual({ at: null, error: null });
   });
 });
 

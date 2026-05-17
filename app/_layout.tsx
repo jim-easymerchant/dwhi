@@ -1,7 +1,7 @@
 import 'react-native-gesture-handler';
 import 'react-native-url-polyfill/auto';
 import React, { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, AppState, type AppStateStatus, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -13,6 +13,7 @@ import { bootstrapHousehold } from '@/services/householdBootstrap';
 import '@/services/location/backgroundLocationTask';
 import { resumeBackgroundLocationTrackingIfEnabled } from '@/services/location/locationService';
 import { ensureRemoteHousehold } from '@/services/household/remoteHouseholdBootstrap';
+import { requestAutoSync } from '@/services/sync/autoSync';
 import { colors } from '@/theme/colors';
 
 export default function RootLayout() {
@@ -37,6 +38,11 @@ export default function RootLayout() {
         console.warn(
           `[dwhi.household] cold-start remote bootstrap deferred: ${remote.message}`,
         );
+      } else if (remote.context?.household.remoteId) {
+        // We're signed in AND linked. Kick off a sync so the app
+        // catches up on remote changes that arrived since the last
+        // run. Debounced inside autoSync.
+        requestAutoSync('cold-start');
       }
 
       setReady(true);
@@ -52,6 +58,21 @@ export default function RootLayout() {
     setReady(false);
     void bootstrap();
   }, [attempt, bootstrap]);
+
+  // Foreground listener: when the app returns from background, give
+  // sync a nudge so the user sees fresh data on whichever screen they
+  // land on. Debounced inside autoSync so a quick app-switch doesn't
+  // queue redundant runs.
+  useEffect(() => {
+    if (!ready) return;
+    const handler = (status: AppStateStatus) => {
+      if (status === 'active') {
+        requestAutoSync('foreground');
+      }
+    };
+    const sub = AppState.addEventListener('change', handler);
+    return () => sub.remove();
+  }, [ready]);
 
   if (error) {
     return (

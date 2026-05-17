@@ -22,6 +22,7 @@ import {
   verifyEmailOtp,
 } from '@/services/auth/authService';
 import { ensureRemoteHousehold } from '@/services/household/remoteHouseholdBootstrap';
+import { requestAutoSync } from '@/services/sync/autoSync';
 import { isSupabaseConfigured } from '@/services/env';
 import { colors, spacing, typography } from '@/theme/colors';
 
@@ -120,6 +121,10 @@ export default function AuthScreen() {
         );
         return;
       }
+      // First sync run for the new session. Fire-and-forget; the user
+      // doesn't wait on it — the Settings card will reflect status
+      // once it completes.
+      requestAutoSync('post-sign-in');
       setMessage(r.message);
       setPhase('done');
       router.replace('/settings');
