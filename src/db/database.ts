@@ -215,6 +215,26 @@ async function runInit(): Promise<void> {
       'sync_status',
     );
   }
+
+  // location_events lives outside the additive ALTER TABLE list because
+  // it's a brand-new table — CREATE TABLE IF NOT EXISTS in Phase 1 handles
+  // both fresh + upgrade installs. Indexes still go via the helper so the
+  // column-existence guard catches a half-created table cleanly.
+  await createIndexIfColumnExists(
+    'idx_location_events_household_id',
+    'location_events',
+    'household_id',
+  );
+  await createIndexIfColumnExists(
+    'idx_location_events_captured_at',
+    'location_events',
+    'captured_at',
+  );
+  await createIndexIfColumnExists(
+    'idx_location_events_sync_status',
+    'location_events',
+    'sync_status',
+  );
 }
 
 /**

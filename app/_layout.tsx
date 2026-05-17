@@ -11,6 +11,11 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { initDatabase } from '@/db/database';
 import { seedIfEmpty } from '@/seed/seedData';
 import { bootstrapHousehold } from '@/services/householdBootstrap';
+// Side-effect: registers the background location TaskManager handler at
+// module load. Must happen before any startLocationUpdatesAsync call,
+// which is why the import lives in the root layout file.
+import '@/services/location/backgroundLocationTask';
+import { resumeBackgroundLocationTrackingIfEnabled } from '@/services/location/locationService';
 import { colors } from '@/theme/colors';
 
 export default function RootLayout() {
@@ -26,6 +31,14 @@ export default function RootLayout() {
       // Backfills any pre-existing rows from earlier installs.
       await bootstrapHousehold();
       await seedIfEmpty();
+      // Best-effort: if the user previously opted in to background
+      // location, resume the native task. Permission revocation is
+      // handled inside; never throws to the bootstrap.
+      try {
+        await resumeBackgroundLocationTrackingIfEnabled();
+      } catch (e) {
+        console.warn('[dwhi] location resume failed:', e);
+      }
       setReady(true);
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);

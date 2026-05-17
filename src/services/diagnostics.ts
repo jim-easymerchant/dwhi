@@ -17,6 +17,14 @@ import { getActiveContextOrNull } from './householdContext';
 import { countPendingChanges, getSyncMode } from './sync/syncStatus';
 import { describeSupabaseStatus } from './supabaseClient';
 import type { SyncMode } from './sync/syncTypes';
+import {
+  countLocationEvents,
+  getLatestLocationEvent,
+} from '@/repositories/locationEventRepository';
+import {
+  getLocationTrackingStatus,
+  type LocationPermissionStatus,
+} from './location/locationService';
 
 export interface Diagnostics {
   aiEnabled: boolean;
@@ -54,6 +62,14 @@ export interface Diagnostics {
     description: string;
     pendingChangesTotal: number;
     pendingByTable: Record<string, number>;
+  };
+  location: {
+    enabled: boolean;
+    permission: LocationPermissionStatus;
+    taskRunning: boolean;
+    eventCount: number;
+    /** ISO timestamp of the most recent stored sample, or null. */
+    lastCapturedAt: string | null;
   };
 }
 
@@ -119,6 +135,31 @@ export async function readDiagnostics(): Promise<Diagnostics> {
     },
     household: buildHouseholdDiagnostic(),
     cloudSync: await buildCloudSyncDiagnostic(),
+    location: await buildLocationDiagnostic(),
+  };
+}
+
+async function buildLocationDiagnostic(): Promise<Diagnostics['location']> {
+  const status = await getLocationTrackingStatus().catch(() => ({
+    enabled: false,
+    permission: 'unavailable' as LocationPermissionStatus,
+    taskRunning: false,
+  }));
+  let eventCount = 0;
+  let lastCapturedAt: string | null = null;
+  try {
+    eventCount = await countLocationEvents();
+    const latest = await getLatestLocationEvent();
+    lastCapturedAt = latest?.capturedAt ?? null;
+  } catch (e) {
+    console.warn('[dwhi] location diagnostics failed:', e);
+  }
+  return {
+    enabled: status.enabled,
+    permission: status.permission,
+    taskRunning: status.taskRunning,
+    eventCount,
+    lastCapturedAt,
   };
 }
 

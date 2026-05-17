@@ -136,4 +136,29 @@ export const SCHEMA_STATEMENTS: string[] = [
     value TEXT,
     updated_at TEXT NOT NULL
   );`,
+
+  // Background location samples. Local-only today; the sync metadata
+  // columns (sync_status / remote_id / deleted_at) line up with the
+  // other domain tables so the existing sync pipeline can pick them up
+  // later without a schema change. Coordinates are deliberately stored
+  // as REAL, not text, so distance math (haversine) is straightforward.
+  `CREATE TABLE IF NOT EXISTS location_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    household_id INTEGER NOT NULL,
+    created_by_member_id INTEGER,
+    created_by_device_id INTEGER,
+    latitude REAL NOT NULL,
+    longitude REAL NOT NULL,
+    accuracy REAL,
+    altitude REAL,
+    heading REAL,
+    speed REAL,
+    provider TEXT,
+    source TEXT NOT NULL DEFAULT 'background',
+    captured_at TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    sync_status TEXT DEFAULT 'local_only',
+    remote_id TEXT,
+    deleted_at TEXT
+  );`,
 ];
