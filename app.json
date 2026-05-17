@@ -17,7 +17,12 @@
         "android.permission.CAMERA",
         "android.permission.READ_EXTERNAL_STORAGE",
         "android.permission.WRITE_EXTERNAL_STORAGE",
-        "android.permission.RECORD_AUDIO"
+        "android.permission.RECORD_AUDIO",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_BACKGROUND_LOCATION",
+        "android.permission.FOREGROUND_SERVICE",
+        "android.permission.FOREGROUND_SERVICE_LOCATION"
       ]
     },
     "ios": {
@@ -25,7 +30,10 @@
       "bundleIdentifier": "com.dwhi.app",
       "infoPlist": {
         "NSCameraUsageDescription": "Take photos of items and receipts to remember what you have.",
-        "NSPhotoLibraryUsageDescription": "Pick photos of items and receipts from your library."
+        "NSPhotoLibraryUsageDescription": "Pick photos of items and receipts from your library.",
+        "NSLocationWhenInUseUsageDescription": "Helps future household features understand when items may have been bought or used. Location stays on this device for now.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "Helps future household features understand when items may have been bought or used. Location stays on this device for now.",
+        "UIBackgroundModes": ["location"]
       }
     },
     "plugins": [
@@ -51,6 +59,16 @@
           "androidSpeechServicePackages": [
             "com.google.android.googlequicksearchbox"
           ]
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "Helps future household features understand when items may have been bought or used. Location stays on this device for now.",
+          "locationAlwaysPermission": "Helps future household features understand when items may have been bought or used. Location stays on this device for now.",
+          "locationWhenInUsePermission": "Helps future household features understand when items may have been bought or used. Location stays on this device for now.",
+          "isAndroidBackgroundLocationEnabled": true,
+          "isAndroidForegroundServiceEnabled": true
         }
       ]
     ],

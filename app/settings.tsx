@@ -7,6 +7,11 @@ import { BigButton } from '@/components/BigButton';
 import { readDiagnostics, getKeyHint, type Diagnostics } from '@/services/diagnostics';
 import { syncNow } from '@/services/sync/syncNow';
 import type { SyncResult } from '@/services/sync/syncTypes';
+import {
+  requestLocationPermissions,
+  startBackgroundLocationTracking,
+  stopBackgroundLocationTracking,
+} from '@/services/location/locationService';
 import { colors, spacing, typography } from '@/theme/colors';
 
 const SYNC_MODE_LABEL: Record<Diagnostics['cloudSync']['mode'], string> = {
@@ -15,12 +20,46 @@ const SYNC_MODE_LABEL: Record<Diagnostics['cloudSync']['mode'], string> = {
   'configured-signed-in': 'Sync ready',
 };
 
+const LOCATION_PERMISSION_LABEL: Record<
+  Diagnostics['location']['permission'],
+  string
+> = {
+  'granted-background': 'Always (background)',
+  'granted-foreground-only': 'While in use only',
+  denied: 'Denied',
+  unavailable: 'Unavailable',
+};
+
+function describeLocationState(loc: Diagnostics['location']): {
+  label: string;
+  tone: 'good' | 'warn' | 'muted';
+} {
+  if (loc.permission === 'denied') return { label: 'Permission denied', tone: 'warn' };
+  if (loc.permission === 'unavailable')
+    return { label: 'Unavailable on this build', tone: 'muted' };
+  if (loc.enabled && loc.taskRunning) return { label: 'Active', tone: 'good' };
+  if (loc.enabled) return { label: 'Enabled (waiting)', tone: 'warn' };
+  return { label: 'Off', tone: 'muted' };
+}
+
+function formatRelativeAge(iso: string | null, now: number = Date.now()): string {
+  if (!iso) return 'No samples yet';
+  const ts = Date.parse(iso);
+  if (!Number.isFinite(ts)) return 'No samples yet';
+  const ageSec = Math.max(0, Math.floor((now - ts) / 1000));
+  if (ageSec < 60) return `${ageSec}s ago`;
+  if (ageSec < 3600) return `${Math.floor(ageSec / 60)}m ago`;
+  if (ageSec < 86400) return `${Math.floor(ageSec / 3600)}h ago`;
+  return `${Math.floor(ageSec / 86400)}d ago`;
+}
+
 export default function SettingsScreen() {
   const router = useRouter();
   const [diag, setDiag] = useState<Diagnostics | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [lastSync, setLastSync] = useState<SyncResult | null>(null);
+  const [locationBusy, setLocationBusy] = useState(false);
 
   const load = useCallback(async () => {
     setRefreshing(true);
@@ -34,6 +73,31 @@ export default function SettingsScreen() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  const handleEnableLocation = useCallback(async () => {
+    if (locationBusy) return;
+    setLocationBusy(true);
+    try {
+      const permission = await requestLocationPermissions();
+      if (permission === 'granted-background' || permission === 'granted-foreground-only') {
+        await startBackgroundLocationTracking();
+      }
+    } finally {
+      setLocationBusy(false);
+      void load();
+    }
+  }, [load, locationBusy]);
+
+  const handleDisableLocation = useCallback(async () => {
+    if (locationBusy) return;
+    setLocationBusy(true);
+    try {
+      await stopBackgroundLocationTracking();
+    } finally {
+      setLocationBusy(false);
+      void load();
+    }
+  }, [load, locationBusy]);
 
   const handleSyncNow = useCallback(async () => {
     if (syncing) return;
@@ -197,6 +261,58 @@ export default function SettingsScreen() {
                 }
                 onPress={() => void handleSyncNow()}
               />
+            </Card>
+
+            <Card>
+              <Text style={styles.cardHeading}>Location</Text>
+              {(() => {
+                const state = describeLocationState(diag.location);
+                return (
+                  <>
+                    <Row label="Status" value={state.label} tone={state.tone} />
+                    <Row
+                      label="Permission"
+                      value={LOCATION_PERMISSION_LABEL[diag.location.permission]}
+                      tone={
+                        diag.location.permission === 'granted-background'
+                          ? 'good'
+                          : diag.location.permission === 'denied'
+                            ? 'warn'
+                            : 'muted'
+                      }
+                    />
+                    <Row
+                      label="Last capture"
+                      value={formatRelativeAge(diag.location.lastCapturedAt)}
+                      tone={diag.location.lastCapturedAt ? 'good' : 'muted'}
+                    />
+                    <Row
+                      label="Stored samples"
+                      value={String(diag.location.eventCount)}
+                      tone={diag.location.eventCount > 0 ? 'good' : 'muted'}
+                    />
+                    <Text style={styles.privacyBody}>
+                      Background samples are kept on this device only. Coordinates
+                      are never displayed or logged.
+                    </Text>
+                    {diag.location.enabled ? (
+                      <BigButton
+                        label={locationBusy ? 'Working…' : 'Disable location'}
+                        variant="secondary"
+                        disabled={locationBusy}
+                        onPress={() => void handleDisableLocation()}
+                      />
+                    ) : (
+                      <BigButton
+                        label={locationBusy ? 'Working…' : 'Enable location'}
+                        variant="primary"
+                        disabled={locationBusy || diag.location.permission === 'unavailable'}
+                        onPress={() => void handleEnableLocation()}
+                      />
+                    )}
+                  </>
+                );
+              })()}
             </Card>
 
             <Card>

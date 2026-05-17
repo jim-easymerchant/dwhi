@@ -1,18 +1,66 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { ScreenContainer } from '@/components/ScreenContainer';
 import { BigButton } from '@/components/BigButton';
+import { LocationOptInModal } from '@/components/LocationOptInModal';
 import { RecentActivity } from '@/components/RecentActivity';
 import {
   listRecentActivity,
   type RecentActivityEntry,
 } from '@/repositories/recentActivityRepository';
+import {
+  acceptLocationPromptAndStart,
+  declineLocationPrompt,
+  hasSeenLocationPrompt,
+} from '@/services/location/locationService';
 import { colors, spacing, typography } from '@/theme/colors';
 
 export default function HomeScreen() {
   const router = useRouter();
   const [activity, setActivity] = useState<RecentActivityEntry[]>([]);
+  const [locationPromptVisible, setLocationPromptVisible] = useState(false);
+  const [locationPromptBusy, setLocationPromptBusy] = useState(false);
+
+  // One-shot opt-in: show on first launch only. Either button marks the
+  // prompt seen so we never auto-show it again — the user can flip the
+  // toggle from Settings if they change their mind.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const seen = await hasSeenLocationPrompt();
+        if (!cancelled && !seen) setLocationPromptVisible(true);
+      } catch (e) {
+        console.warn('[dwhi] location prompt check failed:', e);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const onAcceptLocation = useCallback(async () => {
+    setLocationPromptBusy(true);
+    try {
+      await acceptLocationPromptAndStart();
+    } catch (e) {
+      console.warn('[dwhi] location accept failed:', e);
+    } finally {
+      setLocationPromptBusy(false);
+      setLocationPromptVisible(false);
+    }
+  }, []);
+
+  const onDeclineLocation = useCallback(async () => {
+    try {
+      await declineLocationPrompt();
+    } catch (e) {
+      console.warn('[dwhi] location decline failed:', e);
+    } finally {
+      setLocationPromptVisible(false);
+    }
+  }, []);
 
   // Refresh on every focus so an item just added/used shows up immediately.
   useFocusEffect(
@@ -94,6 +142,12 @@ export default function HomeScreen() {
 
         <RecentActivity entries={activity} />
       </ScrollView>
+      <LocationOptInModal
+        visible={locationPromptVisible}
+        busy={locationPromptBusy}
+        onAccept={onAcceptLocation}
+        onDecline={onDeclineLocation}
+      />
     </ScreenContainer>
   );
 }
