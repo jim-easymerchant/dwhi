@@ -48,6 +48,16 @@ app. **Supabase's default email templates only render a magic link** —
 on a mobile-only build that link redirects to `localhost:3000` (Site URL)
 and is useless. You have to update the templates.
 
+> **Recommendation:** turn **Confirm email OFF** in Auth → Providers →
+> Email. With it off, every email goes through the **Magic Link**
+> template and only `type: 'email'` is needed to verify. If you keep
+> Confirm email ON, you must add `{{ .Token }}` to **both** templates
+> below — the first email a brand-new user receives is the **Confirm
+> Signup** template, not Magic Link, and that token only verifies with
+> `type: 'signup'`. The app falls back from `email` → `signup`
+> automatically (with a visible log line), but a misconfigured template
+> still won't ever deliver a code in the first place.
+
 ### 1. Auth → Email Templates → "Magic Link"
 
 The OTP code lives in the `{{ .Token }}` template variable. Supabase's

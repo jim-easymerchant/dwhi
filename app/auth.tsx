@@ -14,6 +14,9 @@ import { TextField } from '@/components/TextField';
 import { BigButton } from '@/components/BigButton';
 import { Card } from '@/components/Card';
 import {
+  getCurrentSession,
+  normalizeOtpCode,
+  OTP_CODE_LENGTH,
   requestEmailOtp,
   verifyEmailOtp,
 } from '@/services/auth/authService';
@@ -67,19 +70,40 @@ export default function AuthScreen() {
 
   const verifyCode = async () => {
     if (busy) return;
+    // Local validation first so we never burn an OTP attempt on the
+    // server for obviously-wrong input.
+    const normalized = normalizeOtpCode(code);
+    if (normalized.length !== OTP_CODE_LENGTH) {
+      setMessage(null);
+      setError('Enter the 6-digit code from your email.');
+      return;
+    }
+
     setBusy(true);
     setError(null);
     setMessage(null);
     try {
-      const r = await verifyEmailOtp(email, code);
-      if (r.ok) {
-        setMessage(r.message);
-        setPhase('done');
-        // Bounce back to Settings after the success briefly settles.
-        setTimeout(() => router.replace('/settings'), 700);
-      } else {
-        setError(r.message);
+      const r = await verifyEmailOtp(email, normalized);
+      if (!r.ok) {
+        // Hard rule: on any failure we keep the modal open and surface
+        // the error verbatim. Empty messages get a friendly fallback so
+        // the UI never silently does nothing.
+        setError(r.message && r.message.trim() ? r.message : 'Sign in failed. Please try again.');
+        return;
       }
+      // Belt + braces: even on ok, confirm a session exists before we
+      // tell the user they're in. The service already does this, but a
+      // second probe here means the UI never navigates without proof.
+      const session = await getCurrentSession();
+      if (!session) {
+        setError(
+          'Verified but no session is active. Please request a new code and try again.',
+        );
+        return;
+      }
+      setMessage(r.message);
+      setPhase('done');
+      router.replace('/settings');
     } finally {
       setBusy(false);
     }
@@ -125,23 +149,35 @@ export default function AuthScreen() {
                 <Text style={styles.bodyEmphasis}>type the 6-digit code below</Text>
                 . Don't tap the link — it's only useful in a browser, not on this device.
               </Text>
+              {error ? (
+                <Text style={styles.errorInline} accessibilityLiveRegion="polite">
+                  {error}
+                </Text>
+              ) : null}
               <TextField
                 label="6-digit code"
                 value={code}
-                onChangeText={setCode}
+                onChangeText={text => {
+                  // Strip non-digits inline so the input never holds
+                  // garbage that would later fail validation silently.
+                  const cleaned = normalizeOtpCode(text);
+                  setCode(cleaned);
+                  if (error) setError(null);
+                }}
                 keyboardType="number-pad"
                 autoComplete="one-time-code"
                 placeholder="123456"
-                maxLength={6}
+                maxLength={OTP_CODE_LENGTH}
               />
               <BigButton
                 label={busy ? 'Verifying…' : 'Verify'}
                 onPress={verifyCode}
-                disabled={busy || code.trim().length < 4}
+                disabled={busy || normalizeOtpCode(code).length !== OTP_CODE_LENGTH}
               />
               <BigButton
                 label="Use a different email"
                 variant="ghost"
+                disabled={busy}
                 onPress={() => {
                   setPhase('email');
                   setCode('');
@@ -187,5 +223,10 @@ const styles = StyleSheet.create({
   card: { gap: spacing.sm },
   success: { ...typography.caption, color: colors.positive },
   error: { ...typography.caption, color: colors.danger },
+  errorInline: {
+    ...typography.body,
+    color: colors.danger,
+    fontWeight: '600',
+  },
   close: { marginBottom: spacing.md },
 });

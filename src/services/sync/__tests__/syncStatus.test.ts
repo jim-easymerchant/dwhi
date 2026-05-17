@@ -14,12 +14,14 @@ jest.mock('@/db/database', () => ({
   columnExists: (...args: unknown[]) => columnExists(...args),
 }));
 
+const isSupabaseConfigured = jest.fn(() => false);
 jest.mock('@/services/env', () => ({
-  isSupabaseConfigured: jest.fn(() => false),
+  isSupabaseConfigured: () => isSupabaseConfigured(),
 }));
 
+const getSupabaseClient = jest.fn(() => null);
 jest.mock('@/services/supabaseClient', () => ({
-  getSupabaseClient: jest.fn(() => null),
+  getSupabaseClient: () => getSupabaseClient(),
 }));
 
 import { countPendingChanges, getSyncMode } from '../syncStatus';
@@ -68,6 +70,42 @@ describe('countPendingChanges', () => {
 
 describe('getSyncMode', () => {
   test('returns local-only when Supabase is not configured', async () => {
+    isSupabaseConfigured.mockReturnValue(false);
+    getSupabaseClient.mockReturnValue(null);
     expect(await getSyncMode()).toBe('local-only');
+  });
+
+  test('returns configured-signed-out when env is set but no session yet', async () => {
+    isSupabaseConfigured.mockReturnValue(true);
+    getSupabaseClient.mockReturnValue({
+      auth: {
+        getSession: jest.fn(async () => ({ data: { session: null } })),
+      },
+    } as unknown as null);
+    expect(await getSyncMode()).toBe('configured-signed-out');
+  });
+
+  test('flips to configured-signed-in once auth.getSession returns a session', async () => {
+    isSupabaseConfigured.mockReturnValue(true);
+    getSupabaseClient.mockReturnValue({
+      auth: {
+        getSession: jest.fn(async () => ({
+          data: { session: { user: { id: 'u1' } } },
+        })),
+      },
+    } as unknown as null);
+    expect(await getSyncMode()).toBe('configured-signed-in');
+  });
+
+  test('falls back to configured-signed-out when getSession throws', async () => {
+    isSupabaseConfigured.mockReturnValue(true);
+    getSupabaseClient.mockReturnValue({
+      auth: {
+        getSession: jest.fn(async () => {
+          throw new Error('offline');
+        }),
+      },
+    } as unknown as null);
+    expect(await getSyncMode()).toBe('configured-signed-out');
   });
 });
