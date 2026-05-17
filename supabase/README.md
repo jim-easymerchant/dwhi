@@ -17,8 +17,6 @@ keeps working with no Supabase project at all.
 
 ## What is *not* in this branch
 
-- Real auth UI (sign in / sign up). Stub returns `false` for `isSignedIn`;
-  the **Sync now** button stays disabled until that lands.
 - Real outbound/inbound sync — the modules log "would push N rows" and
   return zero counts.
 - Realtime, push notifications, background tasks. Out of scope.
@@ -29,17 +27,110 @@ keeps working with no Supabase project at all.
 2. Open **SQL editor → New query**, paste the contents of
    `sql/001_initial_sync_schema.sql`, and Run. The file is idempotent so
    you can re-run it after edits.
-3. In the project settings → API, copy:
+3. Paste the contents of `sql/002_household_invites.sql` and Run.
+4. In the project settings → API, copy:
    - **Project URL** → `EXPO_PUBLIC_SUPABASE_URL`
    - **anon public** key → `EXPO_PUBLIC_SUPABASE_ANON_KEY`
    Add both to `.env` (local dev) or to the GitHub Actions secrets that
    feed the direct APK build.
-4. Restart Expo (`expo start --clear`) so the new env values are inlined.
+5. Configure auth for email-OTP — **see the section below; the default
+   templates do not work for mobile**.
+6. Restart Expo (`expo start --clear`) so the new env values are inlined.
 
-Open **Settings → Cloud sync**. The mode should now read
-**Configured · Signed out** (because the auth UI is stubbed). The local
-app continues to work; nothing is pushed or pulled until auth + real sync
-land.
+Open **Settings → Cloud sync**. The mode should read
+**Configured · Signed out**. Tap **Sign in**.
+
+## Email OTP setup (REQUIRED for mobile auth)
+
+The app uses `signInWithOtp` + `verifyOtp({ type: 'email' })`. The user
+should receive a **6-digit code** in their email and type it into the
+app. **Supabase's default email templates only render a magic link** —
+on a mobile-only build that link redirects to `localhost:3000` (Site URL)
+and is useless. You have to update the templates.
+
+### 1. Auth → Email Templates → "Magic Link"
+
+The OTP code lives in the `{{ .Token }}` template variable. Supabase's
+default body looks like:
+
+```html
+<h2>Magic Link</h2>
+<p><a href="{{ .ConfirmationURL }}">Log in</a></p>
+```
+
+Replace it with something like:
+
+```html
+<h2>Your sign-in code</h2>
+<p>Enter this 6-digit code in the app to sign in:</p>
+<p style="font-size: 32px; letter-spacing: 8px; font-family: monospace;">
+  {{ .Token }}
+</p>
+<p>The code expires in 10 minutes. If you didn't request this, ignore
+this email.</p>
+```
+
+You can keep the magic link if you want both flows; just make sure
+`{{ .Token }}` is visible.
+
+### 2. Auth → Email Templates → "Confirm signup"
+
+If **Confirm email** is enabled (Auth → Providers → Email), brand-new
+users get this template instead of the Magic Link template on their
+first `signInWithOtp` call. Same fix — add `{{ .Token }}` to the body:
+
+```html
+<h2>Confirm your email</h2>
+<p>Enter this 6-digit code in the app:</p>
+<p style="font-size: 32px; letter-spacing: 8px; font-family: monospace;">
+  {{ .Token }}
+</p>
+```
+
+Alternative (simpler): turn **Confirm email** off if you're okay with
+first-sign-in users skipping that step. With it off, every email goes
+through the Magic Link template.
+
+### 3. Auth → URL Configuration
+
+- **Site URL**: only used if you also keep the magic link. Set this to
+  something benign like `https://example.com` — anything that isn't
+  `localhost:3000`. Mobile users will never visit it.
+- **Redirect URLs**: leave empty. The OTP flow doesn't use them.
+
+### 4. Auth → Providers → Email
+
+- **Enable email signups**: ON.
+- **Confirm email**: optional. If ON, see step 2 above.
+- **Secure email change**: optional; not used by this app today.
+
+### 5. Verify
+
+Send yourself an OTP from the app. The email should contain the
+6-digit code. Pasting that code into the app should sign you in. If
+you see only a link in the email, step 1 or 2 above wasn't applied.
+
+## RLS policy summary
+
+Every row in every table carries `household_id`. The policy on every
+domain table is the same shape:
+
+```sql
+USING (dwhi_is_member(household_id))
+WITH CHECK (dwhi_is_member(household_id))
+```
+
+`dwhi_is_member(uuid)` is a SECURITY DEFINER helper that returns `true`
+iff `auth.uid()` is the `user_id` of a row in `household_members` for the
+target household.
+
+- A signed-in user can only see / write rows in households they're a
+  member of.
+- The **anon key** in the APK bundle is therefore safe to leak: without
+  a signed-in session, every SELECT returns zero rows.
+- Inserts on `households` are gated by `auth.uid() is not null` so any
+  signed-in user can create a household and immediately self-join via
+  `household_members`.
 
 ## RLS policy summary
 

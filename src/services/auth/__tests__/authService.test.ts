@@ -4,12 +4,18 @@
  * client when it is.
  */
 
+/**
+ * `signUp` is intentionally present on the mock so that any drift toward
+ * the wrong API (the spec explicitly says we must NOT call signUp)
+ * shows up as a failed expectation rather than a silent miss.
+ */
 const mockSupabase = {
   auth: {
     signInWithOtp: jest.fn(),
     verifyOtp: jest.fn(),
     signOut: jest.fn(),
     getSession: jest.fn(),
+    signUp: jest.fn(),
   },
 };
 
@@ -72,6 +78,33 @@ describe('when Supabase is configured', () => {
     });
   });
 
+  test('requestEmailOtp never calls signUp (regression guard)', async () => {
+    mockSupabase.auth.signInWithOtp.mockResolvedValue({ error: null });
+    await requestEmailOtp('a@b.co');
+    expect(mockSupabase.auth.signUp).not.toHaveBeenCalled();
+  });
+
+  test('requestEmailOtp does NOT set emailRedirectTo (regression guard)', async () => {
+    // If we ever set emailRedirectTo, Supabase renders the magic-link
+    // variant of the email pointed at that URL. The whole point of OTP
+    // on mobile is to keep the user OFF a link, so this must stay unset.
+    mockSupabase.auth.signInWithOtp.mockResolvedValue({ error: null });
+    await requestEmailOtp('a@b.co');
+    const call = mockSupabase.auth.signInWithOtp.mock.calls[0][0];
+    expect(call.options).not.toHaveProperty('emailRedirectTo');
+    // Belt + braces: the serialized payload also must not contain the
+    // string "localhost" or "redirectTo" anywhere.
+    expect(JSON.stringify(call).toLowerCase()).not.toContain('localhost');
+    expect(JSON.stringify(call).toLowerCase()).not.toContain('redirectto');
+  });
+
+  test('requestEmailOtp success message points the user at the code, not the link', async () => {
+    mockSupabase.auth.signInWithOtp.mockResolvedValue({ error: null });
+    const r = await requestEmailOtp('a@b.co');
+    expect(r.message.toLowerCase()).toContain('6-digit code');
+    expect(r.message.toLowerCase()).toContain('not the link');
+  });
+
   test('requestEmailOtp surfaces auth errors', async () => {
     mockSupabase.auth.signInWithOtp.mockResolvedValue({
       error: { message: 'Invalid email' },
@@ -81,7 +114,7 @@ describe('when Supabase is configured', () => {
     expect(r.message).toBe('Invalid email');
   });
 
-  test('verifyEmailOtp passes through and returns the session', async () => {
+  test('verifyEmailOtp passes through with type:email and returns the session', async () => {
     const session = { user: { id: 'u1', email: 'a@b.co' } };
     mockSupabase.auth.verifyOtp.mockResolvedValue({
       data: { session },
@@ -93,8 +126,28 @@ describe('when Supabase is configured', () => {
     expect(mockSupabase.auth.verifyOtp).toHaveBeenCalledWith({
       email: 'a@b.co',
       token: '123456',
-      type: 'email',
+      type: 'email', // NOT 'magiclink' — those are different verify paths.
     });
+  });
+
+  test('verifyEmailOtp surfaces an invalid-code error verbatim', async () => {
+    mockSupabase.auth.verifyOtp.mockResolvedValue({
+      data: null,
+      error: { message: 'Token has expired or is invalid' },
+    });
+    const r = await verifyEmailOtp('a@b.co', '000000');
+    expect(r.ok).toBe(false);
+    expect(r.message).toBe('Token has expired or is invalid');
+  });
+
+  test('verifyEmailOtp with no session in response → asks for a new code', async () => {
+    mockSupabase.auth.verifyOtp.mockResolvedValue({
+      data: { session: null },
+      error: null,
+    });
+    const r = await verifyEmailOtp('a@b.co', '123456');
+    expect(r.ok).toBe(false);
+    expect(r.message.toLowerCase()).toContain('try requesting a new code');
   });
 
   test('verifyEmailOtp short-circuits on empty inputs', async () => {
