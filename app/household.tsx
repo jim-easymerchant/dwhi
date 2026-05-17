@@ -17,6 +17,7 @@ import { TextField } from '@/components/TextField';
 import { getActiveContextOrNull } from '@/services/householdContext';
 import { switchActiveHouseholdToRemote } from '@/services/householdSwitch';
 import { getCurrentSession } from '@/services/auth/authService';
+import { ensureRemoteHousehold } from '@/services/household/remoteHouseholdBootstrap';
 import {
   createInvite,
   findInviteByCode,
@@ -32,6 +33,9 @@ import { colors, spacing, typography } from '@/theme/colors';
 
 export default function HouseholdScreen() {
   const router = useRouter();
+  // Re-read context on every render so changes from
+  // ensureRemoteHousehold flow through after the bump.
+  const [ctxVersion, setCtxVersion] = useState(0);
   const ctx = getActiveContextOrNull();
   const [loading, setLoading] = useState(false);
   const [signedIn, setSignedIn] = useState(false);
@@ -65,7 +69,30 @@ export default function HouseholdScreen() {
 
   useEffect(() => {
     void refresh();
-  }, [refresh]);
+  }, [refresh, ctxVersion]);
+
+  const handleLinkRemote = async () => {
+    setBusy(true);
+    setError(null);
+    setMessage(null);
+    try {
+      const r = await ensureRemoteHousehold({ expectAuthenticated: true });
+      if (!r.ok) {
+        setError(r.message);
+        return;
+      }
+      // The context singleton was updated in place. Force a re-render
+      // so ctx.household.remoteId / member role pick up the new values.
+      setCtxVersion(v => v + 1);
+      setMessage(
+        r.action === 'created-new'
+          ? 'Created your remote household.'
+          : 'Linked to your remote household.',
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const currentMember = members.find(m => m.isMe);
   const isOwner = currentMember?.role === 'owner';
@@ -200,6 +227,23 @@ export default function HouseholdScreen() {
             </Card>
           ) : (
             <>
+              {!ctx?.household.remoteId ? (
+                <Card>
+                  <Text style={styles.cardHeading}>Remote household</Text>
+                  <Text style={styles.body}>
+                    Your local household isn't linked to Supabase yet. Link
+                    it now to create invites and share access across
+                    devices.
+                  </Text>
+                  <BigButton
+                    label={busy ? 'Linking…' : 'Create remote household'}
+                    variant="primary"
+                    onPress={handleLinkRemote}
+                    disabled={busy}
+                  />
+                </Card>
+              ) : null}
+
               <Card>
                 <Text style={styles.cardHeading}>Members</Text>
                 {loading ? (

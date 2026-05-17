@@ -11,11 +11,14 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { initDatabase } from '@/db/database';
 import { seedIfEmpty } from '@/seed/seedData';
 import { bootstrapHousehold } from '@/services/householdBootstrap';
+
 // Side-effect: registers the background location TaskManager handler at
 // module load. Must happen before any startLocationUpdatesAsync call,
 // which is why the import lives in the root layout file.
 import '@/services/location/backgroundLocationTask';
 import { resumeBackgroundLocationTrackingIfEnabled } from '@/services/location/locationService';
+
+import { ensureRemoteHousehold } from '@/services/household/remoteHouseholdBootstrap';
 import { colors } from '@/theme/colors';
 
 export default function RootLayout() {
@@ -31,6 +34,7 @@ export default function RootLayout() {
       // Backfills any pre-existing rows from earlier installs.
       await bootstrapHousehold();
       await seedIfEmpty();
+
       // Best-effort: if the user previously opted in to background
       // location, resume the native task. Permission revocation is
       // handled inside; never throws to the bootstrap.
@@ -38,6 +42,17 @@ export default function RootLayout() {
         await resumeBackgroundLocationTrackingIfEnabled();
       } catch (e) {
         console.warn('[dwhi] location resume failed:', e);
+
+      // If a Supabase session survived a cold start, converge the
+      // local household state with the server. expectAuthenticated:
+      // false means "local-only mode is fine if there's no session" —
+      // never blocks startup. A real failure (network, RLS surprise)
+      // is logged but not surfaced as a startup error.
+      const remote = await ensureRemoteHousehold();
+      if (!remote.ok) {
+        console.warn(
+          `[dwhi.household] cold-start remote bootstrap deferred: ${remote.message}`,
+        );
       }
       setReady(true);
     } catch (e) {

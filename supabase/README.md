@@ -126,27 +126,65 @@ setting — typically 6 or 8). Pasting that code into the app should
 sign you in. If you see only a link in the email, step 1 or 2 above
 wasn't applied.
 
-## RLS policy summary
+## Tables expected by the app
 
-Every row in every table carries `household_id`. The policy on every
-domain table is the same shape:
+| Table | Purpose | RLS predicate |
+|---|---|---|
+| `households` | One row per shared household. | `dwhi_is_member(id)` for SELECT/UPDATE; `auth.uid() IS NOT NULL` for INSERT |
+| `household_members` | Joins `auth.users` to households with a role (`owner` / `member`). | Members can read/manage rows in households they belong to; any auth user can insert their own first membership row. |
+| `household_invites` | Owner-issued invite codes; redeemable by any signed-in user. | Owner-only INSERT; SELECT by code allowed for any auth user; UPDATE allowed only by the invitee accepting their own invite, or by the owner revoking. |
+| `devices` | Optional per-device row tied to a household. | Scoped by `dwhi_is_member(household_id)`. |
+| `location_events` | Per-household background location samples (local-only today; sync TBD). | Scoped by `dwhi_is_member(household_id)` when remote sync lands. |
+| Domain tables (`items`, `inventory_events`, `receipts`, `receipt_items`, `ask_history`, `ask_feedback`) | Inventory + behaviour history. | Scoped by `dwhi_is_member(household_id)`. |
 
-```sql
-USING (dwhi_is_member(household_id))
-WITH CHECK (dwhi_is_member(household_id))
-```
+Required indexes (already created in `001_initial_sync_schema.sql` and
+`002_household_invites.sql`):
 
-`dwhi_is_member(uuid)` is a SECURITY DEFINER helper that returns `true`
-iff `auth.uid()` is the `user_id` of a row in `household_members` for the
-target household.
+- `household_members(household_id)` and `household_members(user_id)`
+- `household_invites(invite_code)` (UNIQUE) and `household_invites(household_id)`
+- Per-table `household_id` indexes on every domain table
 
-- A signed-in user can only see / write rows in households they're a
-  member of.
-- The **anon key** in the APK bundle is therefore safe to leak: without
-  a signed-in session, every SELECT returns zero rows.
-- Inserts on `households` are gated by `auth.uid() is not null` so any
-  signed-in user can create a household and immediately self-join via
-  `household_members`.
+## Remote household bootstrap (after sign-in)
+
+After a successful `verifyOtp`, the app calls `ensureRemoteHousehold()`
+(in `src/services/household/remoteHouseholdBootstrap.ts`). The
+behaviour depends on what the user already has on the server:
+
+1. **First-time sign-in.** No `household_members` row exists for
+   `auth.uid()`. The app:
+   - Generates a fresh UUID client-side.
+   - INSERTs into `households` with that UUID.
+   - INSERTs into `household_members` as `role='owner'` for the
+     authenticated user.
+   - Stamps the local `households.remote_id` and
+     `household_members.remote_id` / `remote_user_id`.
+
+2. **Returning user.** At least one `household_members` row exists.
+   The app picks the user's owner-role membership (preferred) or oldest
+   membership, links it to the active local household (so the user's
+   local-only data carries over), and stamps the local member row.
+
+3. **Already linked.** The active local household already carries a
+   `remote_id`. The app re-fetches the remote household to confirm it
+   still exists and is visible (membership intact), then no-ops.
+
+Every transition is logged with the `[dwhi.household]` prefix. Failures
+surface in the UI via the auth modal (post-OTP path) or the Manage
+Household screen's "Create remote household" CTA.
+
+## Invite expiration and roles
+
+- Owner role: can mint invites (`households_invites_insert` RLS),
+  remove non-owner members, revoke pending invites.
+- Member role: can read household state, generate inventory events,
+  leave (self-remove). Cannot mint invites or remove others.
+- Invite expiration: optional `expires_at` column. The app validates
+  client-side (`validateInvite()`) and the server's RLS update policy
+  refuses accept on a revoked/expired invite as a second guard. Codes
+  with no `expires_at` live until revoked.
+- Single-use: `accepted_by_user_id` is set on accept, after which the
+  invite is invalid for future accept attempts (both client guard and
+  RLS predicate).
 
 ## RLS policy summary
 
