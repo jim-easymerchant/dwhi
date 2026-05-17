@@ -18,6 +18,7 @@ import { getActiveContextOrNull } from '@/services/householdContext';
 import { switchActiveHouseholdToRemote } from '@/services/householdSwitch';
 import { getCurrentSession } from '@/services/auth/authService';
 import { ensureRemoteHousehold } from '@/services/household/remoteHouseholdBootstrap';
+import { copyToClipboard } from '@/services/clipboardService';
 import {
   createInvite,
   findInviteByCode,
@@ -47,6 +48,10 @@ export default function HouseholdScreen() {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Transient confirmation for the Copy invite button. Shown right
+  // next to the code so the user sees feedback without losing the
+  // generic message slot at the bottom of the card.
+  const [copyMessage, setCopyMessage] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -107,6 +112,7 @@ export default function HouseholdScreen() {
     setBusy(true);
     setError(null);
     setMessage(null);
+    setCopyMessage(null);
     try {
       const r = await createInvite({
         remoteHouseholdId: ctx.household.remoteId,
@@ -121,6 +127,20 @@ export default function HouseholdScreen() {
       }
     } finally {
       setBusy(false);
+    }
+  };
+
+  const handleCopyInvite = async () => {
+    if (!inviteCode) return;
+    // Reset the transient slot so a second tap shows a fresh "Copied."
+    // even if the previous message hasn't faded out.
+    setCopyMessage(null);
+    setError(null);
+    const r = await copyToClipboard(inviteCode, 'invite-code');
+    if (r.ok) {
+      setCopyMessage('Invite code copied.');
+    } else {
+      setError(r.message);
     }
   };
 
@@ -292,7 +312,26 @@ export default function HouseholdScreen() {
                   {newInvite ? (
                     <View style={styles.codeBox}>
                       <Text style={styles.codeBoxLabel}>Invite code</Text>
-                      <Text style={styles.codeBoxCode}>{inviteCode}</Text>
+                      <Text
+                        style={styles.codeBoxCode}
+                        selectable
+                        accessibilityLabel="Invite code (long-press to select manually)"
+                      >
+                        {inviteCode}
+                      </Text>
+                      <BigButton
+                        label="Copy invite code"
+                        variant="secondary"
+                        onPress={handleCopyInvite}
+                      />
+                      {copyMessage ? (
+                        <Text
+                          style={styles.copyConfirmation}
+                          accessibilityLiveRegion="polite"
+                        >
+                          {copyMessage}
+                        </Text>
+                      ) : null}
                     </View>
                   ) : null}
                 </Card>
@@ -404,6 +443,11 @@ const styles = StyleSheet.create({
     color: colors.textPrimary,
     fontFamily: 'Courier',
     letterSpacing: 2,
+  },
+  copyConfirmation: {
+    ...typography.caption,
+    color: colors.positive,
+    fontWeight: '600',
   },
   success: { ...typography.caption, color: colors.positive },
   error: { ...typography.caption, color: colors.danger },
