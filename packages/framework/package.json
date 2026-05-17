@@ -1,0 +1,10 @@
+{
+  "name": "@dwhi/framework",
+  "version": "0.0.0-internal",
+  "private": true,
+  "description": "Reusable app framework: auth, households, invites, devices, sync, storage, location, db helpers. Consumed by apps via workspace symlink. No DWHI pantry concepts.",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "sideEffects": false,
+  "license": "UNLICENSED"
+}

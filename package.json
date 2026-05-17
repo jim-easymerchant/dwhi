@@ -2,6 +2,9 @@
   "name": "do-we-have-it",
   "version": "0.1.0",
   "main": "expo-router/entry",
+  "workspaces": [
+    "packages/*"
+  ],
   "scripts": {
     "start": "expo start",
     "android": "expo start --android",

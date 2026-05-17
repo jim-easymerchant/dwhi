@@ -6,13 +6,21 @@
     "baseUrl": ".",
     "types": ["jest", "node"],
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "@dwhi/framework": ["./packages/framework/src/index.ts"],
+      "@dwhi/framework/*": ["./packages/framework/src/*"],
+      "@dwhi/ui": ["./packages/ui/src/index.ts"],
+      "@dwhi/ui/*": ["./packages/ui/src/*"],
+      "@dwhi/domain": ["./packages/domain/src/index.ts"],
+      "@dwhi/domain/*": ["./packages/domain/src/*"]
     }
   },
   "include": [
     "**/*.ts",
     "**/*.tsx",
     ".expo/types/**/*.ts",
-    "expo-env.d.ts"
+    "expo-env.d.ts",
+    "packages/*/src/**/*.ts",
+    "packages/*/src/**/*.tsx"
   ]
 }
