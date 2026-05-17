@@ -94,8 +94,8 @@ export default function AuthScreen() {
         <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
           <Text style={styles.heading}>Sign in</Text>
           <Text style={styles.body}>
-            Sign in with email to create or join a household. We send a one-time
-            code — no password.
+            Sign in with email to create or join a household. We send a
+            6-digit code by email — no password, no link to click.
           </Text>
 
           {phase === 'email' ? (
@@ -120,7 +120,11 @@ export default function AuthScreen() {
 
           {phase === 'code' ? (
             <Card style={styles.card}>
-              <Text style={styles.body}>Code sent to {email}.</Text>
+              <Text style={styles.body}>
+                Code sent to {email}. Open the email and{' '}
+                <Text style={styles.bodyEmphasis}>type the 6-digit code below</Text>
+                . Don't tap the link — it's only useful in a browser, not on this device.
+              </Text>
               <TextField
                 label="6-digit code"
                 value={code}
@@ -179,6 +183,7 @@ const styles = StyleSheet.create({
   },
   heading: { ...typography.heading, color: colors.textPrimary },
   body: { ...typography.body, color: colors.textSecondary },
+  bodyEmphasis: { ...typography.body, color: colors.textPrimary, fontWeight: '600' },
   card: { gap: spacing.sm },
   success: { ...typography.caption, color: colors.positive },
   error: { ...typography.caption, color: colors.danger },
