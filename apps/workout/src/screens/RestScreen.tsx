@@ -30,9 +30,9 @@ function pickTip(seed: number): string {
 
 export function RestScreen(): JSX.Element {
   const endRest = useWorkoutGameStore((s) => s.endRest);
-  const battleIndex = useWorkoutGameStore((s) => s.currentBattleIndex);
-  const setIndex = useWorkoutGameStore((s) => s.currentSetIndexInBattle);
-  const tip = pickTip(battleIndex * 7 + setIndex);
+  const setIndex = useWorkoutGameStore((s) => s.currentSetIndexInVariant);
+  const phaseIndex = useWorkoutGameStore((s) => s.enemyPhaseIndex);
+  const tip = pickTip(phaseIndex * 7 + setIndex);
 
   return (
     <SafeAreaView style={styles.safe}>

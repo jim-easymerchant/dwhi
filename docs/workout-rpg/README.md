@@ -66,6 +66,16 @@ emotional texture of the long game. They do not expand MVP scope.
     feedback without shame, sample timelines (heavy / pressure /
     recovery / comeback-after-2-weeks).
 
+### Open-ended encounters
+
+14. [`014-open-ended-encounters-and-set-memory.md`](./014-open-ended-encounters-and-set-memory.md)
+    — the shift from "Battle = 3 fixed sets" to "Encounter =
+    sets until the player ends it." Set memory keyed by
+    `(exerciseId, modality, variantId, setIndex)`. Strategy /
+    Equipment chooser. Enemy continuation with the Lingering
+    Shadow fragment. "Victory available" is offered, never
+    forced.
+
 ### Provisioning
 
 13. [`013-nutrition-and-provisioning.md`](./013-nutrition-and-provisioning.md)

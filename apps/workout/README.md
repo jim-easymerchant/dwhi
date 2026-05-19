@@ -66,24 +66,33 @@ apps/workout/
 
 ---
 
-## MVP flow
+## MVP flow (open-ended encounter model)
 
 ```
 HomeScreen
   ↓  tap "Begin · Bodyweight" or "Begin · Weighted"
-BattleScreen (battle 1 of 3)
-  ↓  tap "Attack" on each of 3 sets
-RestScreen → BattleScreen (cycle)
-  ↓  after final set of final battle, "Attack · Wrap it up"
+BattleScreen — Sluggard encounter
+  ├─ Attack            log a set, deal damage, Rest
+  ├─ Switch Strategy   (bodyweight) tap a chip to change variant
+  ├─ Change Plates     (weighted)   tap a chip to change equipment
+  ├─ Continue Sets     after enemy reaches 0 HP
+  ├─ Finish Encounter  after enemy reaches 0 HP
+  └─ Finish Quest      any time after the first set
+RestScreen → BattleScreen
 RewardScreen
   ↓  tap "Return to Camp"
 HomeScreen
 ```
 
-Defaults pre-fill reps / weight per `pushDayQuest.ts`. Steppers
-adjust on the Battle screen — no number-pad keyboards. The
-RewardScreen reads the result of `runQuest()` from the store and
-displays the verdict + XP + Ember change + enemy fate.
+The Battle screen no longer auto-advances after a fixed set count.
+The player decides when to switch variants and when to stop. Set
+memory pre-fills the next set's reps/weight from the most recent
+matching `(exerciseId, modality, variant, setIndex)` snapshot;
+on first contact, defaults come from the variant. See
+[`docs/workout-rpg/014-open-ended-encounters-and-set-memory.md`](../../docs/workout-rpg/014-open-ended-encounters-and-set-memory.md).
+
+The RewardScreen reads the result of `runQuest()` from the store
+and displays the verdict + XP + Ember change + enemy fate.
 
 ---
 
