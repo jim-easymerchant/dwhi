@@ -1,0 +1,21 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@workout/*": ["./src/*"],
+      "@dwhi/framework": ["../../packages/framework/src/index.ts"],
+      "@dwhi/framework/*": ["../../packages/framework/src/*"],
+      "@dwhi/ui": ["../../packages/ui/src/index.ts"],
+      "@dwhi/ui/*": ["../../packages/ui/src/*"],
+      "@dwhi/workout-domain": ["../../packages/workout-domain/src/index.ts"],
+      "@dwhi/workout-domain/*": ["../../packages/workout-domain/src/*"]
+    }
+  },
+  "include": [
+    "app/**/*.ts",
+    "app/**/*.tsx",
+    "src/**/*.ts",
+    "src/**/*.tsx"
+  ]
+}

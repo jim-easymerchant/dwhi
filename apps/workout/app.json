@@ -1,0 +1,28 @@
+{
+  "expo": {
+    "name": "Momentum",
+    "slug": "workout-rpg-momentum",
+    "version": "0.1.0",
+    "scheme": "momentum",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "newArchEnabled": false,
+    "android": {
+      "package": "com.dwhi.workout",
+      "versionCode": 1,
+      "adaptiveIcon": {
+        "backgroundColor": "#0B0B0F"
+      }
+    },
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.dwhi.workout"
+    },
+    "plugins": [
+      "expo-router"
+    ],
+    "experiments": {
+      "typedRoutes": false
+    }
+  }
+}
