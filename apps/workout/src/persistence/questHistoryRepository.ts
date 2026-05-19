@@ -1,0 +1,117 @@
+/**
+ * Quest-history repository — one row per completed Quest.
+ *
+ * Stores a denormalised summary (xp / damage / momentum / defeated
+ * count / primary verdict) plus the full orchestrator result JSON
+ * for the future journal screen. The summary columns are what the
+ * home screen reads to compute "days since last quest" and to show
+ * a quiet recent-activity list.
+ */
+
+import { getDb, nowIso } from './db';
+
+export interface QuestHistoryRecord {
+  id: string;
+  kind: string;
+  templateId?: string | null;
+  startedAtIso?: string | null;
+  completedAtIso: string;
+  workingSetCount: number;
+  totalDamage: number;
+  xp: number;
+  momentumDelta: number;
+  defeatedCount: number;
+  primaryVerdict: string | null;
+  payloadJson: string | null;
+}
+
+interface Row {
+  id: string;
+  kind: string;
+  template_id: string | null;
+  started_at_iso: string | null;
+  completed_at_iso: string;
+  working_set_count: number;
+  total_damage: number;
+  xp: number;
+  momentum_delta: number;
+  defeated_count: number;
+  primary_verdict: string | null;
+  payload_json: string | null;
+}
+
+function rowToRecord(row: Row): QuestHistoryRecord {
+  return {
+    id: row.id,
+    kind: row.kind,
+    templateId: row.template_id,
+    startedAtIso: row.started_at_iso,
+    completedAtIso: row.completed_at_iso,
+    workingSetCount: row.working_set_count,
+    totalDamage: row.total_damage,
+    xp: row.xp,
+    momentumDelta: row.momentum_delta,
+    defeatedCount: row.defeated_count,
+    primaryVerdict: row.primary_verdict,
+    payloadJson: row.payload_json,
+  };
+}
+
+/** Append a completed Quest to the history table. */
+export async function appendQuestHistory(record: QuestHistoryRecord): Promise<void> {
+  const db = await getDb();
+  await db.runAsync(
+    `INSERT INTO workout_quest_history
+       (id, kind, template_id, started_at_iso, completed_at_iso,
+        working_set_count, total_damage, xp, momentum_delta,
+        defeated_count, primary_verdict, payload_json)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
+    [
+      record.id,
+      record.kind,
+      record.templateId ?? null,
+      record.startedAtIso ?? null,
+      record.completedAtIso ?? nowIso(),
+      record.workingSetCount,
+      record.totalDamage,
+      record.xp,
+      record.momentumDelta,
+      record.defeatedCount,
+      record.primaryVerdict ?? null,
+      record.payloadJson ?? null,
+    ],
+  );
+}
+
+/** The most recent completed-Quest timestamp, or null if none yet. */
+export async function getMostRecentCompletedAtIso(): Promise<string | null> {
+  const db = await getDb();
+  const row = await db.getFirstAsync<{ completed_at_iso: string }>(
+    `SELECT completed_at_iso
+       FROM workout_quest_history
+       ORDER BY completed_at_iso DESC
+       LIMIT 1;`,
+  );
+  return row?.completed_at_iso ?? null;
+}
+
+/** Read recent history (most-recent first, optional limit). */
+export async function listRecentQuests(limit = 20): Promise<QuestHistoryRecord[]> {
+  const db = await getDb();
+  const rows = await db.getAllAsync<Row>(
+    `SELECT id, kind, template_id, started_at_iso, completed_at_iso,
+            working_set_count, total_damage, xp, momentum_delta,
+            defeated_count, primary_verdict, payload_json
+       FROM workout_quest_history
+       ORDER BY completed_at_iso DESC
+       LIMIT ?;`,
+    [Math.max(1, Math.floor(limit))],
+  );
+  return rows.map(rowToRecord);
+}
+
+/** Test-only: wipe the table. */
+export async function __wipeQuestHistoryForTests(): Promise<void> {
+  const db = await getDb();
+  await db.execAsync('DELETE FROM workout_quest_history;');
+}
