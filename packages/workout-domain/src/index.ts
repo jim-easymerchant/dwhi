@@ -32,6 +32,7 @@ export * from './momentum';
 export * from './cardio';
 export * from './equipment';
 export * from './combat';
+export * from './orchestrator';
 // `battle` and `progression` re-export from `./types`; importing them
 // again at the root would produce duplicate-export errors. The
 // sub-barrels exist so consumers can write

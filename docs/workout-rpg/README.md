@@ -66,6 +66,18 @@ emotional texture of the long game. They do not expand MVP scope.
     feedback without shame, sample timelines (heavy / pressure /
     recovery / comeback-after-2-weeks).
 
+### Provisioning
+
+13. [`013-nutrition-and-provisioning.md`](./013-nutrition-and-provisioning.md)
+    — nutrition as *provisioning the camp*, never calorie
+    policing. Hard anti-shame / anti-disordered-eating
+    safeguards; in-fiction categories (repair fibre, trail
+    rations, hearth fuel, bright leaves, tideline salts); Camp
+    systems (Hearth pantry, hydration, Recovery Meals, Feast
+    moments, low-energy days); gentle-mode integration; passive
+    Health-API read scope and the things we deliberately decline
+    to read.
+
 ## Quick reference
 
 - **Working title:** Momentum.
@@ -93,6 +105,9 @@ emotional texture of the long game. They do not expand MVP scope.
 - **The Battle screen is a covenant:** mythic before productive;
   no streak counters, no countdown skip incentives, no
   comparative copy, no exclamation marks.
+- **Nutrition is provisioning the camp:** never calorie policing,
+  never body surveillance, never moralised. Effects apply *forward*
+  (tomorrow easier), never *backward* (today guiltier).
 
 ## Implementation scaffold
 
