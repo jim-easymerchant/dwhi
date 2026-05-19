@@ -86,6 +86,17 @@ emotional texture of the long game. They do not expand MVP scope.
     workout model, AsyncStorage scatter, monolithic
     ActiveWorkout screen, timeout punishment, RisingKB branding),
     source-to-target map, branch sequence.
+16. [`016-monster-renderer-port.md`](./016-monster-renderer-port.md)
+    — first concrete port: the View-based pixel monster renderer
+    (`apps/workout/src/render/`). What was ported (technique,
+    palette-indexed grid, breathing animation), what was
+    intentionally NOT copied (the sprite arrays themselves,
+    Iron Quest's rarity taxonomy, HP-percent injury logic, low-HP
+    flicker, DCC tone), mood-indexed palette philosophy
+    (drift / hush / glare / stone), category → sprite binding
+    (`fragmentMap` / `hollowMap` / `wardMap` plus reserved
+    `veilMap` / `emberMap`), Battle-screen integration, and the
+    queued future-extension list.
 
 ### Provisioning
 

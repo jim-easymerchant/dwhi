@@ -32,6 +32,7 @@ import {
 } from '../theme/workoutColors';
 import { RestScreen } from './RestScreen';
 import { buttonStyles, victoryButtonsStyle } from './__styleReflection';
+import { MonsterSprite } from '../render';
 
 export function BattleScreen(): JSX.Element {
   const phase = useWorkoutGameStore((s) => s.phase);
@@ -85,15 +86,15 @@ export function BattleScreen(): JSX.Element {
               styles.silhouette,
               victoryAvailable && styles.silhouetteThinned,
             ]}
+            accessibilityRole="image"
           >
-            <Text
-              style={[
-                styles.silhouetteGlyph,
-                victoryAvailable && styles.silhouetteGlyphThinned,
-              ]}
-            >
-              ◆
-            </Text>
+            <MonsterSprite
+              mood={currentEnemy.mood}
+              category={currentEnemy.category}
+              victoryAvailable={victoryAvailable}
+              pixelSize={8}
+              testID="battle-monster-sprite"
+            />
           </View>
 
           <View style={styles.hpBarTrack}>
@@ -337,13 +338,6 @@ const styles = StyleSheet.create({
   silhouetteThinned: {
     borderColor: workoutColors.emberDim,
     opacity: 0.6,
-  },
-  silhouetteGlyph: {
-    fontSize: 56,
-    color: workoutColors.ash,
-  },
-  silhouetteGlyphThinned: {
-    color: workoutColors.emberDim,
   },
   hpBarTrack: {
     width: '80%',
