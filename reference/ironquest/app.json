@@ -1,0 +1,28 @@
+{
+  "expo": {
+    "name": "Iron Quest",
+    "slug": "iron-quest",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "backgroundColor": "#080808",
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#08080c"
+      },
+      "package": "com.risingkb.workout",
+      "versionCode": 1
+    },
+    "splash": {
+      "backgroundColor": "#08080c"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "f4a0df36-9d67-4935-84bb-a61f92978e63"
+      }
+    },
+    "plugins": [
+      "expo-audio"
+    ]
+  }
+}
