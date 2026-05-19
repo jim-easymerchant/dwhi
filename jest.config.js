@@ -18,6 +18,7 @@ module.exports = {
     '<rootDir>/src/**/__tests__/**/*.test.ts',
     '<rootDir>/packages/*/src/**/__tests__/**/*.test.ts',
     '<rootDir>/packages/*/src/tests/**/*.test.ts',
+    '<rootDir>/apps/*/src/tests/**/*.test.ts',
   ],
   transform: {
     '^.+\\.tsx?$': 'ts-jest',

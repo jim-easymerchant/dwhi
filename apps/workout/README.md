@@ -1,81 +1,114 @@
-# apps/workout (placeholder)
+# apps/workout — Momentum (Workout RPG)
 
-This directory is the **planned home** for the second app in the
-DWHI monorepo: the Workout RPG, working title **Momentum**.
+Expo app shell for the Workout RPG. **MVP UI shell only.** Local /
+in-memory state. The pure `runQuest()` orchestrator in
+`@dwhi/workout-domain` resolves the final Quest. There is **no**
+SQLite, **no** Supabase, **no** auth, **no** sync in this branch.
 
-**Status: placeholder.** There is no runtime entry yet. No
-`app.json`, no `package.json`, no Expo Router screens. The next
-implementation branch will scaffold the Expo app shell into this
-directory.
-
----
-
-## What this app will be
-
-Momentum is a low-friction, ADHD-friendly tactical-RPG workout
-game. A workout session is a Quest. Each exercise is a Battle.
-Each set is a Turn. Rest periods are the enemy's turn. Consistency
-builds Momentum — a slow-gain / slow-decay tier system that
-replaces the streak.
-
-For the design surface, read first:
-
-- [`docs/workout-rpg/README.md`](../../docs/workout-rpg/README.md)
-- [`docs/workout-rpg/001-design-bible.md`](../../docs/workout-rpg/001-design-bible.md)
-- [`docs/workout-rpg/005-mvp-implementation-plan.md`](../../docs/workout-rpg/005-mvp-implementation-plan.md)
-- [`docs/workout-rpg/012-battle-ux-and-feel.md`](../../docs/workout-rpg/012-battle-ux-and-feel.md)
+The existing DWHI pantry app at the repo root is untouched.
 
 ---
 
-## Relationship to shared packages
+## Run locally
 
-When the Expo shell lands, this app will consume:
+From the repo root:
 
-| Package | Role |
-|---|---|
-| [`@dwhi/framework`](../../packages/framework) | Reusable infrastructure: auth, db, storage, sync (when ready). The workout app uses `@dwhi/framework/db` and `@dwhi/framework/storage` in MVP; auth / households / sync are post-MVP. |
-| [`@dwhi/ui`](../../packages/ui) | Domain-agnostic React Native primitives + theme tokens. The workout app extends the theme with an Ember palette in its own `src/theme/`, app-local. |
-| [`@dwhi/workout-domain`](../../packages/workout-domain) | Workout-RPG domain: exercises, archetypes, enemies, momentum, progression, battle shape, cardio, equipment. **Sibling** to `@dwhi/domain`; the two never depend on each other. |
+```bash
+npm install           # workspace install — picks up apps/workout
+cd apps/workout
+npx expo start        # Metro / Expo Go
+```
 
-The workout app **must not** import from
-[`@dwhi/domain`](../../packages/domain) — that's the pantry-only
-surface for `apps/dwhi`. This rule is enforced by smoke tests in
-each domain package's `__tests__/barrel.test.ts`.
+For an Android device:
 
----
+```bash
+cd apps/workout
+npx expo prebuild --platform android --non-interactive --clean
+cd android
+./gradlew assembleRelease
+```
 
-## Where the existing DWHI Expo app still lives
+The resulting APK is at `apps/workout/android/app/build/outputs/apk/release/*.apk`.
 
-The existing pantry app's Expo entry (`app/`, `app.json`,
-`app.config.js`) still lives at the repo root. The follow-up
-listed in [`MONOREPO.md`](../../MONOREPO.md) is to move it into
-`apps/dwhi/` as a pure structural refactor. That move is **not
-part of this branch** and is not required before this app starts
-scaffolding — Expo can run two apps from a workspace once
-`metro.config.js` is updated to include `packages/*` in
-`watchFolders`.
+GitHub Actions has a manual workflow `Build Workout APK (Android)`
+that runs the same flow on a CI runner — see
+[`.github/workflows/workout-android-apk.yml`](../../.github/workflows/workout-android-apk.yml).
 
 ---
 
-## Next steps
+## Layout
 
-The branch sequence (from
-[`docs/workout-rpg/006-monorepo-integration-plan.md`](../../docs/workout-rpg/006-monorepo-integration-plan.md)
-§9):
+```
+apps/workout/
+  app/                       expo-router screens
+    _layout.tsx              SafeAreaProvider + status bar
+    index.tsx                phase-dispatching route shell
+  src/
+    screens/
+      HomeScreen.tsx         The Camp; one CTA: Start Quest
+      BattleScreen.tsx       Enemy silhouette, set entry, Attack
+      RestScreen.tsx         Enemy windup; "I'm ready" exit
+      RewardScreen.tsx       Verdict, XP, Ember, Return to Camp
+    state/
+      workoutGameStore.ts    Zustand store, in-memory only
+    fixtures/
+      pushDayQuest.ts        Push Day quest + Sluggard + 3 battles
+    theme/
+      workoutColors.ts       Ember / Stone / Ash / Hearth / Moss /
+                             Tideline palette per 012 §4
+    tests/
+      ...                    Pure store + fixture tests
+  app.json                   Expo manifest (Momentum, com.dwhi.workout)
+  package.json               Workspace member; @dwhi/workout-app
+  metro.config.js            watchFolders → monorepo root
+  tsconfig.json              Extends root; adds @workout/* alias
+```
 
-1. **This branch — `claude/workout-rpg-scaffold-<token>`** —
-   creates the `@dwhi/workout-domain` package shell and this
-   placeholder. No screens, no formulas. ← *you are here*
-2. **`claude/workout-rpg-combat-core-<token>`** — implements
-   `damage()`, `fatigue()`, `crit()`, `questXp()` as pure
-   functions inside `@dwhi/workout-domain/combat/` with golden
-   tests. No UI.
-3. **`claude/workout-rpg-momentum-<token>`** —
-   `recomputeMomentum()`, tier resolution, Return bonus.
-4. **`claude/workout-rpg-mvp-ui-<token>`** — Battle / Rest /
-   Reward screens scaffolded into `apps/workout/app/`, wired to
-   `@dwhi/workout-domain` via a Zustand store.
-5. **`claude/workout-rpg-polish-<token>`** — animations, sounds,
-   Camp action, history list.
+---
 
-Until step 4, this directory holds only this README.
+## MVP flow
+
+```
+HomeScreen
+  ↓  tap "Begin · Bodyweight" or "Begin · Weighted"
+BattleScreen (battle 1 of 3)
+  ↓  tap "Attack" on each of 3 sets
+RestScreen → BattleScreen (cycle)
+  ↓  after final set of final battle, "Attack · Wrap it up"
+RewardScreen
+  ↓  tap "Return to Camp"
+HomeScreen
+```
+
+Defaults pre-fill reps / weight per `pushDayQuest.ts`. Steppers
+adjust on the Battle screen — no number-pad keyboards. The
+RewardScreen reads the result of `runQuest()` from the store and
+displays the verdict + XP + Ember change + enemy fate.
+
+---
+
+## Tone (012-battle-ux-and-feel.md)
+
+- One CTA per screen. No "Next Quest" prompts.
+- Reward screen ends in **"Return to Camp"**, never "Continue".
+- Copy library: *The Ember holds. Rest is a move. The Hollow has
+  felt the work. The kettle whistled and you reached for it.*
+- No streak counters, no exclamation marks, no comparative copy.
+
+---
+
+## What's NOT in this branch
+
+- SQLite persistence (Quest history, PRs, Momentum decay).
+- Supabase sync or household integration.
+- Auth (email OTP / accounts).
+- Animations / sound / haptics.
+- Multiple quest templates (Pull Day, Legs Day).
+- Camp / recovery flow.
+- Long Road / cardio / Trail Energy.
+- Equipment / inventory.
+- Lore journal.
+
+Each of these lands in a subsequent branch. See
+[`docs/workout-rpg/006-monorepo-integration-plan.md`](../../docs/workout-rpg/006-monorepo-integration-plan.md) §9
+for the planned sequence.

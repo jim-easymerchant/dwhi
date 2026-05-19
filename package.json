@@ -3,7 +3,8 @@
   "version": "0.1.0",
   "main": "expo-router/entry",
   "workspaces": [
-    "packages/*"
+    "packages/*",
+    "apps/*"
   ],
   "scripts": {
     "start": "expo start",

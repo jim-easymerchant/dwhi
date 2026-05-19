@@ -1,0 +1,123 @@
+name: Build Workout APK (Android, Gradle)
+
+# Manual trigger only. Builds an Android APK for the Workout RPG /
+# Momentum app at apps/workout. Uses `expo prebuild` + `./gradlew
+# assembleRelease` on the GitHub-hosted runner — no EAS minutes.
+# The APK is signed with the auto-generated debug keystore — fine
+# for personal testing, not for distribution.
+#
+# This workflow is INDEPENDENT of the existing DWHI pantry APK
+# workflows (android-apk.yml, android-apk-direct.yml). It does not
+# replace them; all three can be triggered side by side.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  # Per-app, per-ref. A pantry build and a workout build can run
+  # in parallel; two workout builds on the same ref do not.
+  group: workout-android-apk-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Workout APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    # The Workout app intentionally does not need OpenAI or Supabase
+    # secrets in the MVP shell — it has no auth, no sync, no network
+    # calls. Build metadata (commit / run / time) is the only thing
+    # injected into the Expo config.
+    steps:
+      - name: Check out repo
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Set up Java 17 (Temurin)
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK (accept licenses)
+        uses: android-actions/setup-android@v3
+
+      - name: Show environment
+        run: |
+          echo "node: $(node --version)"
+          echo "npm:  $(npm --version)"
+          echo "java: $(java -version 2>&1 | head -1)"
+          echo "ANDROID_HOME=${ANDROID_HOME:-unset}"
+          echo "workspaces enabled — apps/workout is a workspace member"
+
+      - name: Install npm deps (root workspaces)
+        # npm ci at the repo root installs the whole workspace,
+        # including apps/workout and its symlinks to @dwhi/*.
+        run: npm ci
+
+      - name: Capture build metadata
+        id: meta
+        run: |
+          SHORT_SHA="${GITHUB_SHA:0:7}"
+          BUILD_TIME="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          APP_VERSION=$(node -p "require('./apps/workout/app.json').expo.version")
+          echo "short_sha=${SHORT_SHA}" >> "$GITHUB_OUTPUT"
+          echo "build_time=${BUILD_TIME}" >> "$GITHUB_OUTPUT"
+          echo "app_version=${APP_VERSION}" >> "$GITHUB_OUTPUT"
+          echo "Building Momentum v${APP_VERSION} @ ${SHORT_SHA} (run #${GITHUB_RUN_NUMBER}) at ${BUILD_TIME}"
+
+      - name: Run unit tests (whole monorepo)
+        # The workout-app store + fixture tests live under
+        # apps/workout/src/tests/ and are globbed by jest.config.js.
+        # Running the full suite catches regressions in
+        # @dwhi/workout-domain too.
+        run: npm test -- --ci --colors=false
+
+      - name: Typecheck (whole monorepo)
+        run: npx tsc --noEmit
+
+      - name: Validate Expo config (workout app)
+        working-directory: apps/workout
+        run: |
+          set -e
+          npx expo config --type prebuild > /dev/null
+          echo "::notice::apps/workout expo config evaluated cleanly"
+
+      - name: Expo prebuild (Android only, clean)
+        # Runs from apps/workout so the generated android/ directory
+        # is colocated with the app, not at the repo root (which
+        # already has android/ from the DWHI pantry app's own
+        # prebuild flows when run locally).
+        working-directory: apps/workout
+        run: npx expo prebuild --platform android --non-interactive --clean
+
+      - name: Gradle assembleRelease
+        working-directory: apps/workout/android
+        run: ./gradlew assembleRelease --stacktrace --no-daemon
+
+      - name: List build outputs
+        if: always()
+        run: |
+          ls -la apps/workout/android/app/build/outputs/apk/release/ || true
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: workout-rpg-android-apk-${{ steps.meta.outputs.app_version }}-${{ steps.meta.outputs.short_sha }}
+          path: apps/workout/android/app/build/outputs/apk/release/*.apk
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Reminder
+        if: always()
+        run: |
+          echo "::notice::APK artifact: workout-rpg-android-apk-${{ steps.meta.outputs.app_version }}-${{ steps.meta.outputs.short_sha }}"
+          echo "::notice::Trigger this workflow manually from the GitHub Actions tab → Build Workout APK (Android, Gradle) → Run workflow."
