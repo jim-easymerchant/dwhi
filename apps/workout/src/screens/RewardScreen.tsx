@@ -5,20 +5,26 @@
  * Quest" CTA — only "Return to Camp." One verdict surfaces as the
  * primary banner; others are listed below in muted style.
  *
- * The result rendered here comes from the pure `runQuest()`
- * orchestrator in @dwhi/workout-domain. We render its data; we do
- * not compute anything ourselves.
+ * The verdict / XP / Momentum data comes from the pure `runQuest()`
+ * orchestrator. The defeated-enemies list comes from the shell's
+ * own multi-phase tracking (the orchestrator only sees the primary
+ * enemy — see docs/workout-rpg/014-open-ended-encounters-and-set-memory.md
+ * §11).
  */
 
 import React from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { useWorkoutGameStore } from '../state/workoutGameStore';
+import {
+  getTotalDamageAcrossPhases,
+  useWorkoutGameStore,
+} from '../state/workoutGameStore';
 import { workoutColors, workoutRadii, workoutSpacing, workoutType } from '../theme/workoutColors';
 
 export function RewardScreen(): JSX.Element {
   const result = useWorkoutGameStore((s) => s.result);
+  const defeatedEnemies = useWorkoutGameStore((s) => s.defeatedEnemies);
   const returnToCamp = useWorkoutGameStore((s) => s.returnToCamp);
 
   if (!result) {
@@ -38,14 +44,37 @@ export function RewardScreen(): JSX.Element {
     );
   }
 
-  const { verdicts, rewards, momentum, enemyResult, totalDamage } = result;
+  const { verdicts, rewards, momentum, enemyResult } = result;
   const primaryVerdict = verdicts[0] ?? 'Steady';
   const otherVerdicts = verdicts.slice(1);
+
+  // Total damage across every phase — shell-side, because the
+  // orchestrator's enemyResult only sees the primary Sluggard.
+  const totalDamageAcrossPhases = getTotalDamageAcrossPhases(
+    useWorkoutGameStore.getState(),
+  );
+
+  const defeatedCount = defeatedEnemies.length;
+  const headlineCopy =
+    defeatedCount >= 2
+      ? `${defeatedCount} fragments thinned.`
+      : defeatedCount === 1
+      ? 'The Sluggard receded.'
+      : 'The Hollow has felt the work.';
+
+  const flavorCopy = (() => {
+    if (defeatedCount >= 2) return 'The room is quieter than it has been.';
+    if (defeatedCount === 1) return 'The room felt taller. Air moved.';
+    if (enemyResult && !enemyResult.defeated) {
+      return 'The room was warmer than it had been.';
+    }
+    return 'The Ember settled.';
+  })();
 
   return (
     <SafeAreaView style={styles.safe}>
       <ScrollView contentContainerStyle={styles.scroll}>
-        <Text style={styles.title}>The Hollow has felt the work.</Text>
+        <Text style={styles.title}>{headlineCopy}</Text>
 
         <View style={styles.verdictBlock}>
           <Text style={styles.verdict}>{primaryVerdict}</Text>
@@ -59,22 +88,48 @@ export function RewardScreen(): JSX.Element {
           <Stat
             label="Ember"
             value={`+${momentum.gainBreakdown.applied}`}
-            sublabel={`${Math.round(momentum.before)} → ${Math.round(momentum.final)} · ${momentum.tierAfter}`}
+            sublabel={`${Math.round(momentum.before)} → ${Math.round(
+              momentum.final,
+            )} · ${momentum.tierAfter}`}
           />
-          {enemyResult && (
-            <Stat
-              label={enemyResult.name}
-              value={enemyResult.defeated ? 'thinned' : 'lingered'}
-              sublabel={`${Math.round(totalDamage)} dmg dealt`}
-            />
-          )}
+          <Stat
+            label="Damage"
+            value={`${Math.round(totalDamageAcrossPhases)}`}
+            sublabel={
+              defeatedCount > 0
+                ? `across ${defeatedCount} ${defeatedCount === 1 ? 'phase' : 'phases'}`
+                : 'this encounter'
+            }
+          />
         </View>
 
-        <Text style={styles.flavor}>
-          {enemyResult?.defeated
-            ? 'The room felt taller. Air moved.'
-            : 'The room was warmer than it had been.'}
-        </Text>
+        {/* Multi-enemy list — only when at least one phase was defeated. */}
+        {defeatedCount > 0 && (
+          <View style={styles.enemyList}>
+            <Text style={styles.enemyListLabel}>THINNED</Text>
+            {defeatedEnemies.map((e) => (
+              <Text key={`${e.id}-${e.phaseIndex}`} style={styles.enemyListRow}>
+                · {e.name}
+                <Text style={styles.enemyListSub}>
+                  {`  ${Math.round(e.damageDealtToThisPhase)} dmg`}
+                </Text>
+              </Text>
+            ))}
+            {enemyResult && !enemyResult.defeated && (
+              <Text style={styles.enemyListMuted}>
+                {`${enemyResult.name} still lingers.`}
+              </Text>
+            )}
+          </View>
+        )}
+
+        {defeatedCount === 0 && enemyResult && !enemyResult.defeated && (
+          <Text style={styles.enemyListMuted}>
+            {`${enemyResult.name} still lingers.`}
+          </Text>
+        )}
+
+        <Text style={styles.flavor}>{flavorCopy}</Text>
 
         <Pressable
           accessibilityRole="button"
@@ -157,16 +212,35 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
   },
-  statLabel: {
-    ...workoutType.label,
-  },
+  statLabel: { ...workoutType.label },
   statValueBlock: { alignItems: 'flex-end' },
   statValue: {
     ...workoutType.heading,
     color: workoutColors.ember,
   },
-  statSublabel: {
+  statSublabel: { ...workoutType.caption },
+  enemyList: {
+    gap: workoutSpacing.xs,
+    paddingHorizontal: workoutSpacing.sm,
+  },
+  enemyListLabel: {
     ...workoutType.caption,
+    color: workoutColors.textMuted,
+    letterSpacing: 2,
+  },
+  enemyListRow: {
+    ...workoutType.body,
+    color: workoutColors.textSecondary,
+  },
+  enemyListSub: {
+    ...workoutType.caption,
+    color: workoutColors.textMuted,
+  },
+  enemyListMuted: {
+    ...workoutType.caption,
+    color: workoutColors.textMuted,
+    textAlign: 'center',
+    fontStyle: 'italic',
   },
   flavor: {
     ...workoutType.body,
