@@ -31,6 +31,7 @@ import {
   workoutType,
 } from '../theme/workoutColors';
 import { RestScreen } from './RestScreen';
+import { buttonStyles, victoryButtonsStyle } from './__styleReflection';
 
 export function BattleScreen(): JSX.Element {
   const phase = useWorkoutGameStore((s) => s.phase);
@@ -108,9 +109,18 @@ export function BattleScreen(): JSX.Element {
           </Text>
 
           {lastSetDamage !== null && lastSetDamage > 0 && (
-            <Text style={styles.lastDamage}>
-              {currentEnemy.name.split(',')[0]} thinned by {Math.round(lastSetDamage)}
-            </Text>
+            <View
+              style={styles.lastDamageBadge}
+              accessibilityRole="text"
+              accessibilityLabel={`Last hit dealt ${Math.round(lastSetDamage)} damage`}
+            >
+              <Text style={styles.lastDamageNumber}>
+                −{Math.round(lastSetDamage)}
+              </Text>
+              <Text style={styles.lastDamageLabel}>
+                {currentEnemy.name.split(',')[0]} thinned by {Math.round(lastSetDamage)}
+              </Text>
+            </View>
           )}
           {enemyPhaseIndex > 0 && (
             <Text style={styles.phaseHint}>
@@ -124,11 +134,12 @@ export function BattleScreen(): JSX.Element {
           <View style={styles.victoryBlock}>
             <Text style={styles.victoryHeading}>Victory available.</Text>
             <Text style={styles.victoryFlavor}>The {currentEnemy.name.split(',')[0]} thins.</Text>
-            <View style={styles.victoryButtons}>
+            <View style={[styles.victoryButtons, victoryButtonsStyle]}>
               <Pressable
                 accessibilityRole="button"
                 style={({ pressed }) => [
                   styles.secondaryButton,
+                  buttonStyles.secondary,
                   pressed && styles.pressed,
                 ]}
                 onPress={continueAfterVictory}
@@ -137,7 +148,11 @@ export function BattleScreen(): JSX.Element {
               </Pressable>
               <Pressable
                 accessibilityRole="button"
-                style={({ pressed }) => [styles.primaryButton, pressed && styles.pressed]}
+                style={({ pressed }) => [
+                  styles.primaryButton,
+                  buttonStyles.primary,
+                  pressed && styles.pressed,
+                ]}
                 onPress={finishEncounter}
               >
                 <Text style={styles.primaryText}>Finish Encounter</Text>
@@ -343,10 +358,26 @@ const styles = StyleSheet.create({
     backgroundColor: workoutColors.ember,
   },
   hpText: { ...workoutType.caption, color: workoutColors.textSecondary },
-  lastDamage: {
-    ...workoutType.body,
+  lastDamageBadge: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: workoutSpacing.sm,
+    marginTop: workoutSpacing.sm,
+    paddingHorizontal: workoutSpacing.md,
+    paddingVertical: workoutSpacing.xs,
+    borderRadius: workoutRadii.pill,
+    backgroundColor: workoutColors.surface,
+    borderWidth: 1,
+    borderColor: workoutColors.emberDim,
+  },
+  lastDamageNumber: {
+    fontSize: 22,
+    fontWeight: '600',
     color: workoutColors.ember,
-    marginTop: workoutSpacing.xs,
+  },
+  lastDamageLabel: {
+    ...workoutType.caption,
+    color: workoutColors.textSecondary,
   },
   phaseHint: {
     ...workoutType.caption,
@@ -361,21 +392,27 @@ const styles = StyleSheet.create({
     gap: workoutSpacing.sm,
     borderWidth: 1,
     borderColor: workoutColors.ember,
-    alignItems: 'center',
+    alignItems: 'stretch',
   },
   victoryHeading: {
     ...workoutType.heading,
     color: workoutColors.ember,
+    textAlign: 'center',
   },
   victoryFlavor: {
     ...workoutType.body,
     color: workoutColors.textSecondary,
     fontStyle: 'italic',
+    textAlign: 'center',
   },
+  // Bug 1 fix — stack vertically and stretch full-width. Avoids
+  // horizontal overflow / button collision on narrow Android
+  // screens; keeps tap targets large.
   victoryButtons: {
-    flexDirection: 'row',
-    gap: workoutSpacing.md,
+    flexDirection: 'column',
+    gap: workoutSpacing.sm,
     marginTop: workoutSpacing.sm,
+    width: '100%',
   },
 
   entryBlock: {
@@ -423,8 +460,10 @@ const styles = StyleSheet.create({
     paddingVertical: workoutSpacing.md,
     paddingHorizontal: workoutSpacing.lg,
     alignItems: 'center',
+    minHeight: 48,
+    justifyContent: 'center',
   },
-  primaryText: { fontSize: 15, fontWeight: '600', color: workoutColors.background },
+  primaryText: { fontSize: 16, fontWeight: '600', color: workoutColors.background },
   secondaryButton: {
     backgroundColor: workoutColors.surfaceElevated,
     borderRadius: workoutRadii.md,
@@ -433,6 +472,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: workoutColors.border,
     alignItems: 'center',
+    minHeight: 48,
+    justifyContent: 'center',
   },
   secondaryText: { ...workoutType.body, color: workoutColors.textPrimary },
 

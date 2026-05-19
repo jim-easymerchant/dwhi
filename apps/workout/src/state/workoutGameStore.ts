@@ -34,6 +34,26 @@ import {
   type ExerciseVariant,
   type Variant,
 } from '../fixtures/pushDayQuest';
+import type {
+  EnemyCategory,
+  EnemyMood,
+} from '@dwhi/workout-domain';
+
+// ---------------------------------------------------------------------------
+// Tuning — local to this layer, not in the orchestrator balance.
+//
+// `PLAN_EXPANSION_PER_CONTINUATION` is the number of additional
+// planned sets the orchestrator should expect when the player taps
+// "Continue Sets" after a victory. Each continuation is an explicit
+// commitment to more work, so the static plan grows to match — that
+// way the orchestrator's anti-grind (soft-cap taper + junk-volume
+// penalty) stays in place but no longer punishes legitimate
+// multi-phase encounters with XP = 0.
+//
+// The orchestrator's balance constants are UNCHANGED.
+// ---------------------------------------------------------------------------
+
+export const PLAN_EXPANSION_PER_CONTINUATION = 3;
 
 // ---------------------------------------------------------------------------
 // Phase
@@ -76,6 +96,29 @@ export interface SetMemoryEntry {
 }
 
 export type SetMemory = Record<string, SetMemoryEntry>;
+
+// ---------------------------------------------------------------------------
+// Defeated-enemy tracking — Bug 2.
+//
+// The orchestrator only sees the single enemy passed via runQuest().
+// In open-ended play the player can defeat several phases (Sluggard,
+// then a Lingering Shadow, then a smaller Shadow, ...). We record each
+// phase here so the Reward screen can summarise them honestly.
+// ---------------------------------------------------------------------------
+
+export interface DefeatedEnemyEntry {
+  id: string;
+  name: string;
+  mood: EnemyMood;
+  category: EnemyCategory;
+  maxHp: number;
+  /** Damage applied to this specific phase (capped at maxHp). */
+  damageDealtToThisPhase: number;
+  /** 0 for the primary, 1+ for continuation fragments. */
+  phaseIndex: number;
+  /** setIndexInQuest of the killing blow. */
+  defeatedOnSetIndexInQuest: number;
+}
 
 /** Stable memory key for a set position. */
 export function memoryKey(input: {
@@ -135,6 +178,11 @@ export interface WorkoutGameState {
   enemyPhaseIndex: number;
   lastSetDamage: number | null;
   victoryAvailable: boolean;
+
+  // --- multi-phase accounting (Bug 2) ---
+  defeatedEnemies: DefeatedEnemyEntry[];
+  /** How many times "Continue Sets" was tapped in this Quest. */
+  continuationCount: number;
 
   // --- quest record ---
   log: LoggedSet[];
@@ -270,6 +318,9 @@ export const useWorkoutGameStore = create<WorkoutGameState>((set, get) => ({
   lastSetDamage: null,
   victoryAvailable: false,
 
+  defeatedEnemies: [],
+  continuationCount: 0,
+
   log: [],
   setMemory: {},
   result: null,
@@ -291,6 +342,8 @@ export const useWorkoutGameStore = create<WorkoutGameState>((set, get) => ({
       enemyPhaseIndex: 0,
       lastSetDamage: null,
       victoryAvailable: false,
+      defeatedEnemies: [],
+      continuationCount: 0,
       log: [],
       result: null,
     }));
@@ -346,6 +399,26 @@ export const useWorkoutGameStore = create<WorkoutGameState>((set, get) => ({
     const finisher = newPhaseHp === 0 && s.currentEnemyHp > 0;
     provisionalRow.finisher = finisher;
 
+    // Track defeated phases at the moment HP hits zero. This is the
+    // single point of truth: a defeat is recorded once, when it
+    // happens. continueAfterVictory does NOT push to this list — that
+    // would risk double-counting on edge cases.
+    const newDefeated: DefeatedEnemyEntry[] = finisher
+      ? [
+          ...s.defeatedEnemies,
+          {
+            id: s.currentEnemy.id,
+            name: s.currentEnemy.name,
+            mood: s.currentEnemy.mood,
+            category: s.currentEnemy.category,
+            maxHp: s.currentEnemy.maxHp,
+            damageDealtToThisPhase: s.currentEnemy.maxHp,
+            phaseIndex: s.enemyPhaseIndex,
+            defeatedOnSetIndexInQuest: provisionalRow.setIndexInQuest,
+          },
+        ]
+      : s.defeatedEnemies;
+
     const memKey = memoryKey({
       exerciseId: variant.id,
       modality: s.modality,
@@ -376,6 +449,7 @@ export const useWorkoutGameStore = create<WorkoutGameState>((set, get) => ({
       currentEnemyHp: newPhaseHp,
       lastSetDamage: damage,
       victoryAvailable: newPhaseHp === 0,
+      defeatedEnemies: newDefeated,
       draftReps: nextDraft.reps,
       draftWeightKg: nextDraft.weightKg,
     }));
@@ -412,6 +486,10 @@ export const useWorkoutGameStore = create<WorkoutGameState>((set, get) => ({
       currentEnemyHp: nextEnemy.maxHp,
       victoryAvailable: false,
       lastSetDamage: null,
+      // Bump the plan-expansion counter — the player has explicitly
+      // committed to more work. finishQuest reads this when sizing
+      // the orchestrator's plannedSetCount.
+      continuationCount: s.continuationCount + 1,
     }));
   },
 
@@ -427,8 +505,21 @@ export const useWorkoutGameStore = create<WorkoutGameState>((set, get) => ({
     const s = get();
     if (s.log.length === 0) return;
     const sets = buildSetInputsFromLog(s.log, s.bodyweightKg);
+
+    // Bug 3 fix — Expand plannedSetCount by the number of
+    // continuation phases the player explicitly committed to. The
+    // orchestrator's soft-cap taper and junk-volume penalty stay
+    // intact; we just feed an honest plan that reflects what the
+    // player chose to do, so legitimate multi-phase encounters do
+    // not bottom out at XP = 0.
+    //
+    // No continuation → planned stays at the static baseline (9).
+    const expandedPlannedSetCount =
+      PUSH_DAY_QUEST.plannedSetCount +
+      s.continuationCount * PLAN_EXPANSION_PER_CONTINUATION;
+
     const result = runQuest({
-      quest: PUSH_DAY_QUEST,
+      quest: { ...PUSH_DAY_QUEST, plannedSetCount: expandedPlannedSetCount },
       enemy: SLUGGARD,
       sets,
       priorMomentum: s.priorMomentum,
@@ -454,6 +545,8 @@ export const useWorkoutGameStore = create<WorkoutGameState>((set, get) => ({
       enemyPhaseIndex: 0,
       lastSetDamage: null,
       victoryAvailable: false,
+      defeatedEnemies: [],
+      continuationCount: 0,
       log: [],
       result: null,
       // setMemory is intentionally preserved across return-to-camp.
@@ -479,6 +572,33 @@ export function getBattleProgress(state: WorkoutGameState): number {
   const max = state.currentEnemy.maxHp;
   if (max <= 0) return 1;
   return Math.min(1, Math.max(0, 1 - state.currentEnemyHp / max));
+}
+
+/**
+ * Total damage dealt across every phase of the encounter, capped
+ * per phase at that phase's maxHp. Bug-2 helper for the Reward
+ * screen — the orchestrator's `enemyResult.totalDamage` only sees
+ * the original (Sluggard) phase.
+ */
+export function getTotalDamageAcrossPhases(state: WorkoutGameState): number {
+  const fromDefeated = state.defeatedEnemies.reduce(
+    (acc, e) => acc + e.damageDealtToThisPhase,
+    0,
+  );
+  // The currently-active phase may have partial damage applied.
+  const currentApplied = Math.max(
+    0,
+    state.currentEnemy.maxHp - state.currentEnemyHp,
+  );
+  // If the current phase was just defeated, it's already counted in
+  // `defeatedEnemies` — currentApplied == maxHp and currentEnemyHp == 0
+  // would double-count. Guard against it.
+  const alreadyDefeated = state.defeatedEnemies.some(
+    (e) =>
+      e.id === state.currentEnemy.id &&
+      e.phaseIndex === state.enemyPhaseIndex,
+  );
+  return fromDefeated + (alreadyDefeated ? 0 : currentApplied);
 }
 
 // ---------------------------------------------------------------------------
