@@ -40,6 +40,32 @@ that shape the long tail of the game without expanding MVP scope.
    integration, and **The Long Road** anti-shame continuity
    system.
 
+### Enemies, progression, and feel
+
+These documents formalize the third wave of design — the
+emotional texture of the long game. They do not expand MVP scope.
+
+10. [`010-enemy-design-bible.md`](./010-enemy-design-bible.md) —
+    what *Stillness* is, enemy philosophy, mood-based factions
+    (*The Drift, The Hush, The Glare, The Stone*), named lesser
+    fragments (*Sluggard*, *The Pale Hours*, *Old Mire*, *The
+    Brittle Crown*, *The Long Smoke*, *The Hundred Hands*, *The
+    Splintering*, *The Grey Vow*, *The Inward Ring*, *The Empty
+    Hearth*), the Ward system, archetype affinities, escalation
+    philosophy.
+11. [`011-progression-and-rewards.md`](./011-progression-and-rewards.md) —
+    XP philosophy, the 1-50 named ladder plus *Steadfast*
+    post-level-50 cadence, what scales and what *never* scales,
+    First-of-the-Week / Recovery-week / Comeback bonuses, the
+    "good stopping point" reinforcement, soft caps and
+    anti-exploit rules, lore fragment structure.
+12. [`012-battle-ux-and-feel.md`](./012-battle-ux-and-feel.md) —
+    the covenant: motion language, color and audio palettes,
+    haptics, Ember behavior, Rest overlay design, Quest
+    completion cinematic, recovery-day screen, "you are tired"
+    feedback without shame, sample timelines (heavy / pressure /
+    recovery / comeback-after-2-weeks).
+
 ## Quick reference
 
 - **Working title:** Momentum.
@@ -57,6 +83,16 @@ that shape the long tail of the game without expanding MVP scope.
 - **Equipment is autobiographical:** what the character wears is a
   portrait of how the player trained, not what dropped from a
   chest.
+- **The antagonist is not the player:** *Stillness* is what
+  gathers when no witness is present. Enemies are mythic
+  fragments of it — *defeat is dispersal, not death*. No therapy
+  language, no diagnostic vocabulary, no "fight your X" copy.
+- **The reward loop sends the player home:** the exit beat is
+  longer than the entry beat; the reward screen ends in *Return
+  to Camp*, never *Next Quest*; tomorrow takes care of itself.
+- **The Battle screen is a covenant:** mythic before productive;
+  no streak counters, no countdown skip incentives, no
+  comparative copy, no exclamation marks.
 
 ## Next implementation branch
 
