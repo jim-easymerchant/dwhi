@@ -1,15 +1,23 @@
 /**
- * MVP Push Day fixture.
+ * Push Day fixture — open-ended encounter model.
  *
- * One Quest definition, one Enemy (Sluggard, Lord of Couches), and
- * the bodyweight + weighted variants for the three Push-Day
- * exercises. Used by the in-memory game store to drive the first
- * playable flow.
+ * One Encounter ("Push") with Sluggard as the primary enemy and
+ * a Lingering Shadow as the optional follow-up fragment. Within
+ * the Encounter, the player picks a Strategy (bodyweight) or
+ * Equipment Variant (weighted) and adds sets at their own pace.
  *
- * Source of truth for shape: docs/workout-rpg/005-mvp-implementation-plan.md.
+ * See:
+ *   docs/workout-rpg/014-open-ended-encounters-and-set-memory.md
+ *   docs/workout-rpg/005-mvp-implementation-plan.md
+ *   docs/workout-rpg/003-combat-mechanics.md §2.2 (profiles)
  */
 
-import type { EnemyInput, ExerciseProfile, QuestDefinition, SetInput } from '@dwhi/workout-domain';
+import type {
+  EnemyInput,
+  ExerciseArchetype,
+  ExerciseProfile,
+  QuestDefinition,
+} from '@dwhi/workout-domain';
 
 // ---------------------------------------------------------------------------
 // Exercise profiles (from 003-combat-mechanics.md §2.2).
@@ -22,25 +30,34 @@ export const EXERCISE_PROFILES = {
   pikePushup: { loadScale: 6, bodyweightCoefficient: 0.6 } satisfies ExerciseProfile,
   tricepsExtension: { loadScale: 4, bodyweightCoefficient: 0 } satisfies ExerciseProfile,
   diamondPushup: { loadScale: 4, bodyweightCoefficient: 0.65 } satisfies ExerciseProfile,
+  inclinePushup: { loadScale: 10, bodyweightCoefficient: 0.5 } satisfies ExerciseProfile,
+  kneePushup: { loadScale: 10, bodyweightCoefficient: 0.5 } satisfies ExerciseProfile,
 } as const;
 
 // ---------------------------------------------------------------------------
 // Quest definition.
+//
+// `plannedSetCount` here is the *suggested* set total for the entire
+// Quest, used by the orchestrator's soft-cap taper and the
+// disciplined-exit window. The player can stop earlier (Held the
+// Line) or push past (with diminishing returns).
 // ---------------------------------------------------------------------------
 
 export const PUSH_DAY_QUEST: QuestDefinition = {
   id: 'push-day',
   kind: 'strength',
   templateId: 'push_day',
-  plannedSetCount: 9, // 3 exercises × 3 working sets
+  plannedSetCount: 9,
 };
 
 // ---------------------------------------------------------------------------
-// Sluggard, Lord of Couches.
+// Enemies — Sluggard and the optional Lingering Shadow follow-up.
 //
-// HP is set to roughly match 9 working sets of mid-effort push work
-// (≈ 60 dmg per set at Steady momentum). Tuned by the worked
-// example: ~540 lets the third exercise's final set be the kill.
+// Sluggard's HP is sized so that ~9 working sets at mid-effort
+// thin it on schedule. Past that, the player can call victory or
+// continue. The Shadow is intentionally smaller; further
+// continuation phases halve the previous max, floored at a small
+// constant so the math never crashes to zero.
 // ---------------------------------------------------------------------------
 
 export const SLUGGARD: EnemyInput = {
@@ -51,79 +68,173 @@ export const SLUGGARD: EnemyInput = {
   category: 'lesser_fragment',
 };
 
+export const LINGERING_SHADOW: EnemyInput = {
+  id: 'sluggard-shadow',
+  name: 'A Lingering Shadow',
+  maxHp: 180,
+  mood: 'hush',
+  category: 'lesser_fragment',
+};
+
+/** Smallest HP a continuation phase will ever spawn with. */
+export const MIN_CONTINUATION_HP = 40;
+
+/**
+ * Given the *previous* phase's enemy and its max HP, return the
+ * next phase's enemy spec. Pure — same input, same output.
+ *
+ *   phase 0 (in store)       → Sluggard (max 540)
+ *   first continuation       → Lingering Shadow (max 180)
+ *   second continuation      → Lingering Shadow (max 90)
+ *   third continuation       → Lingering Shadow (max 45)
+ *   ...                      → floored at MIN_CONTINUATION_HP
+ */
+export function getNextEnemyPhase(prevMaxHp: number): EnemyInput {
+  const nextMax = Math.max(
+    MIN_CONTINUATION_HP,
+    Math.floor(prevMaxHp / 2),
+  );
+  return { ...LINGERING_SHADOW, maxHp: nextMax };
+}
+
 // ---------------------------------------------------------------------------
-// The three Battles, each with its bodyweight and weighted variants.
+// Variant catalogues for the Push encounter.
 //
-// A `BattlePlan` describes what the player is about to do; the
-// store turns it into `SetInput[]` once reps / weight are chosen.
+// A `Variant` is a single bodyweight strategy OR a single weighted
+// equipment exercise. Each carries its archetype, exercise profile,
+// and starting defaults; the store maps a variant → a SetInput when
+// a set is logged.
 // ---------------------------------------------------------------------------
 
 export type Variant = 'bodyweight' | 'weighted';
 
-export interface BattlePlan {
-  battleIndex: number;
-  weightedExerciseId: string;
-  weightedExerciseName: string;
-  weightedProfile: ExerciseProfile;
-  bodyweightExerciseId: string;
-  bodyweightExerciseName: string;
-  bodyweightProfile: ExerciseProfile;
-  archetype: SetInput['archetype'];
+export interface ExerciseVariant {
+  id: string;
+  name: string;
+  archetype: ExerciseArchetype;
+  profile: ExerciseProfile;
   defaultReps: number;
-  defaultWeightKg: number;
-  setsPerBattle: number;
+  defaultWeightKg: number; // 0 for bodyweight strategies
 }
 
-export const PUSH_DAY_BATTLES: readonly BattlePlan[] = [
+/** Bodyweight strategies the player can switch between mid-encounter. */
+export const PUSH_BODYWEIGHT_STRATEGIES: readonly ExerciseVariant[] = [
   {
-    battleIndex: 0,
-    weightedExerciseId: 'bench',
-    weightedExerciseName: 'Bench Press',
-    weightedProfile: EXERCISE_PROFILES.bench,
-    bodyweightExerciseId: 'pushup',
-    bodyweightExerciseName: 'Pushup',
-    bodyweightProfile: EXERCISE_PROFILES.pushup,
-    archetype: 'heavy',
-    defaultReps: 8,
-    defaultWeightKg: 40,
-    setsPerBattle: 3,
-  },
-  {
-    battleIndex: 1,
-    weightedExerciseId: 'shoulder-press',
-    weightedExerciseName: 'Shoulder Press',
-    weightedProfile: EXERCISE_PROFILES.shoulderPress,
-    bodyweightExerciseId: 'pike-pushup',
-    bodyweightExerciseName: 'Pike Pushup',
-    bodyweightProfile: EXERCISE_PROFILES.pikePushup,
-    archetype: 'heavy',
-    defaultReps: 8,
-    defaultWeightKg: 14,
-    setsPerBattle: 3,
-  },
-  {
-    battleIndex: 2,
-    weightedExerciseId: 'triceps-extension',
-    weightedExerciseName: 'Triceps Extension',
-    weightedProfile: EXERCISE_PROFILES.tricepsExtension,
-    bodyweightExerciseId: 'diamond-pushup',
-    bodyweightExerciseName: 'Diamond Pushup',
-    bodyweightProfile: EXERCISE_PROFILES.diamondPushup,
+    id: 'pushup',
+    name: 'Pushup',
     archetype: 'pressure',
+    profile: EXERCISE_PROFILES.pushup,
     defaultReps: 10,
-    defaultWeightKg: 7.5,
-    setsPerBattle: 3,
+    defaultWeightKg: 0,
+  },
+  {
+    id: 'pike-pushup',
+    name: 'Pike Pushup',
+    archetype: 'pressure',
+    profile: EXERCISE_PROFILES.pikePushup,
+    defaultReps: 8,
+    defaultWeightKg: 0,
+  },
+  {
+    id: 'diamond-pushup',
+    name: 'Diamond Pushup',
+    archetype: 'pressure',
+    profile: EXERCISE_PROFILES.diamondPushup,
+    defaultReps: 10,
+    defaultWeightKg: 0,
+  },
+  {
+    id: 'incline-pushup',
+    name: 'Incline Pushup',
+    archetype: 'pressure',
+    profile: EXERCISE_PROFILES.inclinePushup,
+    defaultReps: 12,
+    defaultWeightKg: 0,
+  },
+  {
+    id: 'knee-pushup',
+    name: 'Knee Pushup',
+    archetype: 'pressure',
+    profile: EXERCISE_PROFILES.kneePushup,
+    defaultReps: 12,
+    defaultWeightKg: 0,
   },
 ] as const;
 
-/**
- * Default mock prior momentum for a fresh player. Sits comfortably
- * inside the Steady tier so the worked-example numbers reproduce.
- */
+/** Weighted equipment variants for the same encounter. */
+export const PUSH_WEIGHTED_VARIANTS: readonly ExerciseVariant[] = [
+  {
+    id: 'bench-press',
+    name: 'Bench Press',
+    archetype: 'heavy',
+    profile: EXERCISE_PROFILES.bench,
+    defaultReps: 8,
+    defaultWeightKg: 40,
+  },
+  {
+    id: 'shoulder-press',
+    name: 'Shoulder Press',
+    archetype: 'heavy',
+    profile: EXERCISE_PROFILES.shoulderPress,
+    defaultReps: 8,
+    defaultWeightKg: 14,
+  },
+  {
+    id: 'triceps-extension',
+    name: 'Triceps Extension',
+    archetype: 'pressure',
+    profile: EXERCISE_PROFILES.tricepsExtension,
+    defaultReps: 10,
+    defaultWeightKg: 7.5,
+  },
+] as const;
+
+export interface Encounter {
+  id: string;
+  name: string;
+  primaryEnemy: EnemyInput;
+  bodyweightStrategies: readonly ExerciseVariant[];
+  weightedVariants: readonly ExerciseVariant[];
+}
+
+export const PUSH_ENCOUNTER: Encounter = {
+  id: 'push',
+  name: 'Push',
+  primaryEnemy: SLUGGARD,
+  bodyweightStrategies: PUSH_BODYWEIGHT_STRATEGIES,
+  weightedVariants: PUSH_WEIGHTED_VARIANTS,
+};
+
+// ---------------------------------------------------------------------------
+// Defaults
+// ---------------------------------------------------------------------------
+
+/** Default mock prior momentum for a fresh player (Steady tier). */
 export const DEFAULT_PRIOR_MOMENTUM = 25;
 
-/**
- * Default player bodyweight when the player hasn't entered theirs.
- * Mirrors `combatBalance.defaultBodyweightKg`.
- */
+/** Default player bodyweight when none is entered. */
 export const DEFAULT_BODYWEIGHT_KG = 70;
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+/** Pick the variants array for a given modality. */
+export function variantsFor(
+  encounter: Encounter,
+  modality: Variant,
+): readonly ExerciseVariant[] {
+  return modality === 'weighted'
+    ? encounter.weightedVariants
+    : encounter.bodyweightStrategies;
+}
+
+/** Find a variant by id, falling back to the first if missing. */
+export function findVariant(
+  encounter: Encounter,
+  modality: Variant,
+  variantId: string,
+): ExerciseVariant {
+  const list = variantsFor(encounter, modality);
+  return list.find((v) => v.id === variantId) ?? list[0];
+}

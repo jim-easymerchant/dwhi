@@ -14,7 +14,7 @@ import { workoutColors, workoutRadii, workoutSpacing, workoutType } from '../the
 
 export function HomeScreen(): JSX.Element {
   const startQuest = useWorkoutGameStore((s) => s.startQuest);
-  const variant = useWorkoutGameStore((s) => s.variant);
+  const modality = useWorkoutGameStore((s) => s.modality);
   const priorMomentum = useWorkoutGameStore((s) => s.priorMomentum);
 
   return (
@@ -42,7 +42,7 @@ export function HomeScreen(): JSX.Element {
             accessibilityRole="button"
             style={({ pressed }) => [
               styles.variantButton,
-              variant === 'bodyweight' && styles.variantButtonActive,
+              modality === 'bodyweight' && styles.variantButtonActive,
               pressed && styles.pressed,
             ]}
             onPress={() => startQuest('bodyweight')}
@@ -53,7 +53,7 @@ export function HomeScreen(): JSX.Element {
             accessibilityRole="button"
             style={({ pressed }) => [
               styles.variantButton,
-              variant === 'weighted' && styles.variantButtonActive,
+              modality === 'weighted' && styles.variantButtonActive,
               pressed && styles.pressed,
             ]}
             onPress={() => startQuest('weighted')}
