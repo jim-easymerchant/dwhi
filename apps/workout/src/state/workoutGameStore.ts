@@ -40,6 +40,47 @@ import type {
 } from '@dwhi/workout-domain';
 
 // ---------------------------------------------------------------------------
+// Side-effect handler registry.
+//
+// The store stays sync. The persistence bridge (which uses
+// expo-sqlite) registers fire-and-forget handlers here so that
+// store actions can save without import-cycling against the bridge
+// module.
+// ---------------------------------------------------------------------------
+
+export interface PersistenceHandlers {
+  onSetLogged?: (input: {
+    exerciseId: string;
+    modality: Variant;
+    variantId: string;
+    setIndex: number;
+    reps?: number;
+    weightKg?: number;
+  }) => void;
+  onQuestCompleted?: (input: {
+    questId: string;
+    templateId?: string | null;
+    kind: string;
+    workingSetCount: number;
+    totalDamage: number;
+    xp: number;
+    momentumDelta: number;
+    defeatedEnemies: readonly DefeatedEnemyEntry[];
+    primaryVerdict: string | null;
+    finalMomentum: number;
+    payload?: unknown;
+  }) => void;
+}
+
+let handlers: PersistenceHandlers = {};
+export function setPersistenceHandlers(h: PersistenceHandlers): void {
+  handlers = { ...handlers, ...h };
+}
+export function __clearPersistenceHandlersForTests(): void {
+  handlers = {};
+}
+
+// ---------------------------------------------------------------------------
 // Tuning — local to this layer, not in the orchestrator balance.
 //
 // `PLAN_EXPANSION_PER_CONTINUATION` is the number of additional
@@ -163,6 +204,14 @@ export interface WorkoutGameState {
   bodyweightKg: number;
   priorMomentum: number;
 
+  // --- persistence-hydrated state ---
+  /** Set true once hydratePersistence() has populated the store (or
+   * failed gracefully). UI may use this to defer history panels. */
+  persistenceReady: boolean;
+  /** ISO timestamp of the most recently completed Quest. Drives the
+   * `daysSinceLastQuest` value passed to runQuest. */
+  lastSessionAtIso: string | null;
+
   // --- modality + variant ---
   modality: Variant;
   currentVariantId: string;
@@ -270,6 +319,22 @@ const PROJECTION_ENEMY: EnemyInput = {
   maxHp: 1_000_000,
 };
 
+/**
+ * Whole-day count between the persisted last-session timestamp and
+ * now. Returns 999 when no prior session is on record (signals a
+ * brand-new install). Returns 0 when the gap is < 24h. Pure.
+ */
+export function computeDaysSinceLastQuest(
+  lastSessionAtIso: string | null,
+  nowMs: number = Date.now(),
+): number {
+  if (!lastSessionAtIso) return 999;
+  const last = Date.parse(lastSessionAtIso);
+  if (!Number.isFinite(last)) return 999;
+  if (nowMs < last) return 0;
+  return Math.floor((nowMs - last) / (24 * 60 * 60 * 1000));
+}
+
 function projectFinalSetDamage(
   log: readonly LoggedSet[],
   bodyweightKg: number,
@@ -304,6 +369,9 @@ export const useWorkoutGameStore = create<WorkoutGameState>((set, get) => ({
   phase: 'home',
   bodyweightKg: DEFAULT_BODYWEIGHT_KG,
   priorMomentum: DEFAULT_PRIOR_MOMENTUM,
+
+  persistenceReady: false,
+  lastSessionAtIso: null,
 
   modality: 'bodyweight',
   currentVariantId: INITIAL_VARIANT.id,
@@ -453,6 +521,16 @@ export const useWorkoutGameStore = create<WorkoutGameState>((set, get) => ({
       draftReps: nextDraft.reps,
       draftWeightKg: nextDraft.weightKg,
     }));
+
+    // Fire-and-forget persistence — the UI does not await.
+    handlers.onSetLogged?.({
+      exerciseId: variant.id,
+      modality: s.modality,
+      variantId: variant.id,
+      setIndex: s.currentSetIndexInVariant,
+      reps: s.draftReps,
+      weightKg: s.modality === 'weighted' ? s.draftWeightKg : undefined,
+    });
   },
 
   // -------------------------------------------------------------------
@@ -506,27 +584,47 @@ export const useWorkoutGameStore = create<WorkoutGameState>((set, get) => ({
     if (s.log.length === 0) return;
     const sets = buildSetInputsFromLog(s.log, s.bodyweightKg);
 
-    // Bug 3 fix — Expand plannedSetCount by the number of
-    // continuation phases the player explicitly committed to. The
-    // orchestrator's soft-cap taper and junk-volume penalty stay
-    // intact; we just feed an honest plan that reflects what the
-    // player chose to do, so legitimate multi-phase encounters do
-    // not bottom out at XP = 0.
-    //
-    // No continuation → planned stays at the static baseline (9).
+    // Bug 3 (open-battle-fixes) — Expand plannedSetCount by the
+    // number of continuation phases the player explicitly committed
+    // to. Orchestrator anti-grind stays intact; the plan reflects
+    // what the player chose to do.
     const expandedPlannedSetCount =
       PUSH_DAY_QUEST.plannedSetCount +
       s.continuationCount * PLAN_EXPANSION_PER_CONTINUATION;
+
+    // Days since last quest is now real (persisted across launches),
+    // computed by the persistence bridge from `lastSessionAtIso`. We
+    // store the derived value as the input to runQuest.
+    const days = computeDaysSinceLastQuest(s.lastSessionAtIso);
 
     const result = runQuest({
       quest: { ...PUSH_DAY_QUEST, plannedSetCount: expandedPlannedSetCount },
       enemy: SLUGGARD,
       sets,
       priorMomentum: s.priorMomentum,
-      daysSinceLastQuest: 1,
+      daysSinceLastQuest: days,
       nowIso: STATIC_NOW_ISO,
     });
     set(() => ({ phase: 'reward', result }));
+
+    // Fire-and-forget — saves momentum + appends history.
+    handlers.onQuestCompleted?.({
+      questId: `quest-${Date.now()}`,
+      templateId: PUSH_DAY_QUEST.templateId ?? null,
+      kind: PUSH_DAY_QUEST.kind,
+      workingSetCount: result.questXp.setCountForVolume,
+      totalDamage: result.totalDamage,
+      xp: result.questXp.xp,
+      momentumDelta: result.momentum.gainBreakdown.applied,
+      defeatedEnemies: s.defeatedEnemies,
+      primaryVerdict: result.verdicts[0] ?? null,
+      finalMomentum: result.momentum.final,
+      payload: {
+        verdicts: result.verdicts,
+        rewards: result.rewards,
+        momentum: result.momentum,
+      },
+    });
   },
 
   // -------------------------------------------------------------------
@@ -549,7 +647,8 @@ export const useWorkoutGameStore = create<WorkoutGameState>((set, get) => ({
       continuationCount: 0,
       log: [],
       result: null,
-      // setMemory is intentionally preserved across return-to-camp.
+      // setMemory, priorMomentum, lastSessionAtIso, and
+      // persistenceReady are intentionally preserved.
     }));
   },
 }));
