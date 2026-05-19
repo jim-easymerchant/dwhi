@@ -7,10 +7,11 @@
 // __DEV__ is shimmed to false so engine debug logs stay silent.
 //
 // Path aliases mirror tsconfig.json:
-//   @/...               -> src/...
-//   @dwhi/framework[/x] -> packages/framework/src[/x]
-//   @dwhi/ui[/x]        -> packages/ui/src[/x]
-//   @dwhi/domain[/x]    -> packages/domain/src[/x]
+//   @/...                       -> src/...
+//   @dwhi/framework[/x]         -> packages/framework/src[/x]
+//   @dwhi/ui[/x]                -> packages/ui/src[/x]
+//   @dwhi/domain[/x]            -> packages/domain/src[/x]
+//   @dwhi/workout-domain[/x]    -> packages/workout-domain/src[/x]
 module.exports = {
   testEnvironment: 'node',
   testMatch: [
@@ -28,6 +29,8 @@ module.exports = {
     '^@dwhi/ui/(.*)$': '<rootDir>/packages/ui/src/$1',
     '^@dwhi/domain$': '<rootDir>/packages/domain/src/index.ts',
     '^@dwhi/domain/(.*)$': '<rootDir>/packages/domain/src/$1',
+    '^@dwhi/workout-domain$': '<rootDir>/packages/workout-domain/src/index.ts',
+    '^@dwhi/workout-domain/(.*)$': '<rootDir>/packages/workout-domain/src/$1',
     // Stub native modules whose real implementations require a RN
     // runtime. Tests that need specific behavior still override with
     // jest.mock() inside the test file — the mapper just keeps the

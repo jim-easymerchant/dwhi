@@ -94,8 +94,33 @@ emotional texture of the long game. They do not expand MVP scope.
   no streak counters, no countdown skip incentives, no
   comparative copy, no exclamation marks.
 
+## Implementation scaffold
+
+The first implementation branch (`claude/workout-rpg-scaffold-…`)
+has landed the monorepo plumbing without building any game
+mechanics:
+
+- [`packages/workout-domain/`](../../packages/workout-domain) —
+  the workout-RPG domain package. Vocabulary only: archetypes,
+  enemy moods/categories, momentum tiers, cardio modalities,
+  equipment kinds/families/sets, Quest- and Battle-kind tuples.
+  No formulas, no React, no React Native, no side effects.
+- [`apps/workout/`](../../apps/workout) — placeholder directory
+  holding only a `README.md`. The Expo app shell lands in a
+  later branch.
+- `tsconfig.json` and `jest.config.js` are wired with
+  `@dwhi/workout-domain` aliases. The existing DWHI app's
+  imports and runtime are unchanged.
+- Barrel smoke tests guarantee the package surface stays
+  vocabulary-only, has no forbidden imports (React, React
+  Native, `@/...`, `@dwhi/domain`), and does not leak into
+  `@dwhi/framework` / `@dwhi/domain`.
+
 ## Next implementation branch
 
-After this design branch merges (or is referenced), the recommended
-follow-up is **`claude/workout-rpg-scaffold-<token>`** — see
-`006-monorepo-integration-plan.md` §9 for the full sequence.
+After the scaffold, the next branch is
+**`claude/workout-rpg-combat-core-<token>`** — implementing
+`damage()`, `fatigue()`, `crit()`, and `questXp()` as pure
+functions inside `@dwhi/workout-domain/combat/` with golden-table
+unit tests. See `006-monorepo-integration-plan.md` §9 for the full
+sequence.

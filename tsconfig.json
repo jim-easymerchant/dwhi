@@ -12,7 +12,9 @@
       "@dwhi/ui": ["./packages/ui/src/index.ts"],
       "@dwhi/ui/*": ["./packages/ui/src/*"],
       "@dwhi/domain": ["./packages/domain/src/index.ts"],
-      "@dwhi/domain/*": ["./packages/domain/src/*"]
+      "@dwhi/domain/*": ["./packages/domain/src/*"],
+      "@dwhi/workout-domain": ["./packages/workout-domain/src/index.ts"],
+      "@dwhi/workout-domain/*": ["./packages/workout-domain/src/*"]
     }
   },
   "include": [

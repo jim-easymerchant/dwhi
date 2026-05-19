@@ -243,8 +243,8 @@ change needed.
 "@dwhi/workout-domain/*":    ["./packages/workout-domain/src/*"]
 ```
 
-And mirror the alias in `jest.config.js` `moduleNameMapper`. The
-next branch handles both.
+And mirror the alias in `jest.config.js` `moduleNameMapper`. Both
+were landed in the scaffold branch — see §11.
 
 ## 8. CI / build implications
 
@@ -280,3 +280,16 @@ No source files are modified. The DWHI app and the existing
 packages are unchanged. The only addition is `docs/workout-rpg/`.
 Build, typecheck, and tests should be exactly as green as the base
 branch.
+
+## 11. Scaffold status
+
+| Item | Status | Notes |
+|---|---|---|
+| `packages/workout-domain/` package | **landed (scaffold branch)** | Vocabulary only — archetypes, enemy moods/categories, momentum tiers, cardio modalities, equipment kinds/families/sets, Quest- and Battle-kind tuples. No formulas, no React, no React Native, no side effects. |
+| `apps/workout/` placeholder | **landed (scaffold branch)** | Holds only a `README.md`. Expo shell arrives in the MVP-UI branch. |
+| `tsconfig.json` paths for `@dwhi/workout-domain[/x]` | **landed (scaffold branch)** | |
+| `jest.config.js` moduleNameMapper for `@dwhi/workout-domain[/x]` | **landed (scaffold branch)** | `testMatch` already globs `packages/*/src/**/__tests__` so the new package's tests are auto-picked-up. |
+| Barrel smoke tests | **landed (scaffold branch)** | Verify vocabulary surface, no forbidden imports (React, RN, `@/...`, `@dwhi/domain`), and no leak into `@dwhi/framework` / `@dwhi/domain`. |
+| Combat / momentum / cardio formulas | **not in scaffold** | Land in `claude/workout-rpg-combat-core-<token>` and `claude/workout-rpg-momentum-<token>`. |
+| Schema migrations | **not in scaffold** | Land alongside the UI / repositories branch (`claude/workout-rpg-mvp-ui-<token>`). |
+| Metro `watchFolders` update | **not yet** | Needed only when an app starts importing from `@dwhi/workout-domain` — i.e., the MVP-UI branch. |

@@ -1,0 +1,10 @@
+{
+  "name": "@dwhi/workout-domain",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Workout RPG domain: exercises, archetypes, enemies, momentum, progression, battle shape, cardio, equipment. Pure-TS types and seed data; no React, no React Native, no DWHI pantry concepts.",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "sideEffects": false,
+  "license": "UNLICENSED"
+}
