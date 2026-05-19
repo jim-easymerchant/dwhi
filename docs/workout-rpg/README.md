@@ -76,6 +76,17 @@ emotional texture of the long game. They do not expand MVP scope.
     Shadow fragment. "Victory available" is offered, never
     forced.
 
+### Reference porting
+
+15. [`015-ironquest-port-plan.md`](./015-ironquest-port-plan.md)
+    — concrete plan for mining the sibling `reference/ironquest/`
+    project: what to port (View-based pixel sprites, camp scene,
+    pooled flavour lines, fragment generator, pure-logic timer,
+    encounter resume), what to leave (DCC hostile copy, A/B
+    workout model, AsyncStorage scatter, monolithic
+    ActiveWorkout screen, timeout punishment, RisingKB branding),
+    source-to-target map, branch sequence.
+
 ### Provisioning
 
 13. [`013-nutrition-and-provisioning.md`](./013-nutrition-and-provisioning.md)
