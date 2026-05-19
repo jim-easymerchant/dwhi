@@ -76,6 +76,28 @@ emotional texture of the long game. They do not expand MVP scope.
     Shadow fragment. "Victory available" is offered, never
     forced.
 
+### Reference porting
+
+15. [`015-ironquest-port-plan.md`](./015-ironquest-port-plan.md)
+    — concrete plan for mining the sibling `reference/ironquest/`
+    project: what to port (View-based pixel sprites, camp scene,
+    pooled flavour lines, fragment generator, pure-logic timer,
+    encounter resume), what to leave (DCC hostile copy, A/B
+    workout model, AsyncStorage scatter, monolithic
+    ActiveWorkout screen, timeout punishment, RisingKB branding),
+    source-to-target map, branch sequence.
+16. [`016-monster-renderer-port.md`](./016-monster-renderer-port.md)
+    — first concrete port: the View-based pixel monster renderer
+    (`apps/workout/src/render/`). What was ported (technique,
+    palette-indexed grid, breathing animation), what was
+    intentionally NOT copied (the sprite arrays themselves,
+    Iron Quest's rarity taxonomy, HP-percent injury logic, low-HP
+    flicker, DCC tone), mood-indexed palette philosophy
+    (drift / hush / glare / stone), category → sprite binding
+    (`fragmentMap` / `hollowMap` / `wardMap` plus reserved
+    `veilMap` / `emberMap`), Battle-screen integration, and the
+    queued future-extension list.
+
 ### Provisioning
 
 13. [`013-nutrition-and-provisioning.md`](./013-nutrition-and-provisioning.md)

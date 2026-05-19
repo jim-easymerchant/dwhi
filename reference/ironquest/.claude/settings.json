@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(grep -r \"humanoid\\\\|beast\\\\|aberration\\\\|construct\\\\|swarm\\\\|pixel.*art\\\\|archetype\" c:/build/IronQuest/src c:/build/IronQuest/screens c:/build/IronQuest/*.js)",
+      "Bash(find /c/build/IronQuest -name \"*.md\" -exec grep -l \"expo-audio\\\\|Audio\\\\|sound\" {} \\\\;)"
+    ]
+  }
+}
