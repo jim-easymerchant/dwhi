@@ -99,7 +99,54 @@ The four pillars every feature must serve at least one of:
 4. **Return without shame.** The game wants you back; it does not
    need you to apologize.
 
-## 7. Out of scope (for now)
+## 7. Embodied progression
+
+> *The player's build reflects real behavior.*
+> A character at month six should be a readable, honest portrait
+> of how that player actually trained — not a portrait of how
+> lucky they got with drops or how much they ground.
+
+Five threads weave into the same cord. Each is detailed in its
+own doc; this section is the unified statement of intent.
+
+1. **Consistency shapes identity.** Showing up over weeks
+   determines what armor the character wears (see
+   `008-equipment-philosophy.md` — *Stonebound Plate*). A player
+   who keeps the Vow becomes durable; durability is not a stat
+   ticked upward, it is a *named consequence* of consistent
+   action.
+2. **Recovery shapes survivability.** Honoring rest, mobility,
+   and disciplined exits earns *Emberweave* and unlocks
+   recovery-side mechanics (see `004-momentum-consistency.md` and
+   `007-exercise-archetypes.md` — *recovery* archetype). The
+   player who recovers does not "fall behind"; they become harder
+   to knock down.
+3. **Cardio reconnects the world.** Walking, hiking, running,
+   cycling, and swimming feed *Trail Energy* and restore *The
+   Hollow* (see `009-cardio-world-systems.md`). Cardio is the
+   verb that moves the camera. It is also the *Long Road* — the
+   anti-shame anchor for any week the player can't lift.
+4. **Lifting pushes back Stillness.** Strength sessions remain
+   the game's combat surface (see `003-combat-mechanics.md`).
+   Damage, crit, archetypal feel — this is where the war is
+   *fought*, but it is not where the world is *built*. Both
+   matter; neither is the whole.
+5. **Equipment is autobiography, not loot.** Weapons reflect how
+   the player attacks; armor reflects how the player rests and
+   returns (see `008-equipment-philosophy.md`). No drop tables.
+   No tier inflation. The gear *is the story*.
+
+The hard rule that ties all five together: **every visible
+piece of the character is downstream of a named behavior.** No
+visual upgrade is granted by RNG, money, or arbitrary level
+threshold alone. If the player can't point to *what they did* and
+*how that became this* — the system is failing, and we redesign.
+
+This is what we mean by *embodied progression*: the avatar is not
+a power fantasy projected on top of effort. It is the effort,
+*made visible*.
+
+## 8. Out of scope (for now)
 
 - Multiplayer / guilds / leaderboards.
 - Diet / calorie tracking.
@@ -107,18 +154,19 @@ The four pillars every feature must serve at least one of:
 - Video form-checking.
 - Premium / monetization.
 - Cross-app integration with `@dwhi/domain` (pantry).
-- Heart-rate or wearable integration.
+- Active smartwatch gameplay (passive Health API integration is a
+  post-MVP opt-in — see `009-cardio-world-systems.md` §7).
 
 These may be revisited later, but not in MVP.
 
-## 8. Naming
+## 9. Naming
 
 Working title: **Momentum**.
 Backups: *Hollow*, *Vow-Bearer*, *Ember*, *The Long Return*.
 Final name decision deferred until MVP screens exist. No app-store
 listing depends on the name yet.
 
-## 9. Success criteria (qualitative)
+## 10. Success criteria (qualitative)
 
 After 4 weeks of dogfooding, a returning user should be able to say:
 
