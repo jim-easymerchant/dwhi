@@ -44,6 +44,7 @@ export function WorkoutLibraryScreen(): JSX.Element {
   const selectedThemeId = useWorkoutGameStore((s) => s.selectedThemeId);
   const selectedTemplateId = useWorkoutGameStore((s) => s.selectedTemplateId);
   const setSelectedTemplate = useWorkoutGameStore((s) => s.setSelectedTemplate);
+  const startQuest = useWorkoutGameStore((s) => s.startQuest);
   const returnToCamp = useWorkoutGameStore((s) => s.returnToCamp);
   const persistenceDisabled = useWorkoutGameStore((s) => s.persistenceDisabled);
 
@@ -221,7 +222,28 @@ export function WorkoutLibraryScreen(): JSX.Element {
           </Text>
         ) : null}
 
-        {/* ---------- Return ---------- */}
+        {/* ---------- Begin / Return ---------- */}
+        <Pressable
+          accessibilityRole="button"
+          testID="workouts-begin"
+          onPress={() => {
+            // Default modality: whatever the selected template was
+            // designed around. The user can switch mid-quest via
+            // the BattleScreen's variant chooser.
+            const t =
+              templates.find((tpl) => tpl.id === selectedTemplateId) ??
+              templates[0];
+            const modality = t?.defaultModality ?? 'bodyweight';
+            startQuest(modality);
+          }}
+          style={({ pressed }) => [
+            styles.beginButton,
+            { backgroundColor: theme.uiAccent.primary },
+            pressed && styles.pressed,
+          ]}
+        >
+          <Text style={styles.beginButtonText}>Begin Selected Workout</Text>
+        </Pressable>
         <Pressable
           accessibilityRole="button"
           testID="workouts-return"
@@ -416,6 +438,18 @@ const styles = StyleSheet.create({
     color: workoutColors.textPrimary,
     textAlign: 'center',
     fontStyle: 'italic',
+  },
+  beginButton: {
+    borderRadius: workoutRadii.md,
+    paddingVertical: workoutSpacing.lg,
+    alignItems: 'center',
+    marginTop: workoutSpacing.md,
+  },
+  beginButtonText: {
+    ...workoutType.body,
+    color: workoutColors.background,
+    fontWeight: '600',
+    letterSpacing: 1,
   },
   returnButton: {
     backgroundColor: workoutColors.surfaceElevated,

@@ -69,8 +69,10 @@ export {
   __wipeThemeStoreForTests,
   loadStoredThemeId,
   loadStoredWeightUnit,
+  loadStoredWorkoutTemplateId,
   saveStoredThemeId,
   saveStoredWeightUnit,
+  saveStoredWorkoutTemplateId,
 } from './themeRepository';
 
 export {

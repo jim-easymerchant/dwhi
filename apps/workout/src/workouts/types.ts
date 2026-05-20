@@ -26,6 +26,7 @@
  */
 
 import type {
+  EnemyInput,
   ExerciseArchetype,
   ExerciseProfile,
 } from '@dwhi/workout-domain';
@@ -106,6 +107,21 @@ export interface WorkoutTemplate {
   /** When the template was created (ISO string). Stable for
    *  built-ins; the parser stamps imports at parse time. */
   createdAtIso: string;
+  /**
+   * Optional handcrafted primary enemy. When unset, the adapter
+   * derives one from the template's dominant archetype. Used by
+   * built-ins (Push Day → SLUGGARD) for back-compat with the
+   * existing canonical encounter.
+   *
+   * User imports never set this — the adapter always derives.
+   */
+  enemyOverride?: EnemyInput;
+  /**
+   * Optional handcrafted continuation-phase generator. Same
+   * back-compat hatch as `enemyOverride`. Pure function;
+   * receives the previous phase's max HP, returns the next.
+   */
+  nextPhaseEnemyOverride?: (prevMaxHp: number) => EnemyInput;
 }
 
 // ---------------------------------------------------------------------------

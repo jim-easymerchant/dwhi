@@ -26,6 +26,10 @@ export function RewardScreen(): JSX.Element {
   const result = useWorkoutGameStore((s) => s.result);
   const defeatedEnemies = useWorkoutGameStore((s) => s.defeatedEnemies);
   const returnToCamp = useWorkoutGameStore((s) => s.returnToCamp);
+  // The workout the player just finished — drives the summary
+  // header. Falls back to the encounter's `workoutName`.
+  const activeEncounter = useWorkoutGameStore((s) => s.activeEncounter);
+  const log = useWorkoutGameStore((s) => s.log);
 
   if (!result) {
     return (
@@ -71,9 +75,26 @@ export function RewardScreen(): JSX.Element {
     return 'The Ember settled.';
   })();
 
+  // Distinct exercises the player actually logged this quest —
+  // for the "Exercises completed" summary line.
+  const completedExercises: readonly string[] = (() => {
+    const seen = new Set<string>();
+    const out: string[] = [];
+    for (const row of log) {
+      if (!seen.has(row.exerciseId)) {
+        seen.add(row.exerciseId);
+        out.push(row.exerciseName);
+      }
+    }
+    return out;
+  })();
+
   return (
     <SafeAreaView style={styles.safe}>
       <ScrollView contentContainerStyle={styles.scroll}>
+        <Text testID="reward-workout-name" style={styles.workoutName}>
+          {activeEncounter.workoutName.toUpperCase()}
+        </Text>
         <Text style={styles.title}>{headlineCopy}</Text>
 
         <View style={styles.verdictBlock}>
@@ -129,6 +150,24 @@ export function RewardScreen(): JSX.Element {
           </Text>
         )}
 
+        {/* Distinct exercises logged this quest — surfaces the
+            workout's shape on the summary even when the player
+            stayed on one variant. */}
+        {completedExercises.length > 0 && (
+          <View testID="reward-exercises-block" style={styles.enemyList}>
+            <Text style={styles.enemyListLabel}>EXERCISES COMPLETED</Text>
+            {completedExercises.map((name) => (
+              <Text
+                key={name}
+                testID={`reward-exercise-${name}`}
+                style={styles.enemyListRow}
+              >
+                · {name}
+              </Text>
+            ))}
+          </View>
+        )}
+
         <Text style={styles.flavor}>{flavorCopy}</Text>
 
         <Pressable
@@ -179,6 +218,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: workoutSpacing.lg,
+  },
+  workoutName: {
+    ...workoutType.caption,
+    color: workoutColors.ember,
+    letterSpacing: 3,
+    textAlign: 'center',
+    fontWeight: '700',
+    fontSize: 13,
   },
   title: {
     ...workoutType.heading,

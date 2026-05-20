@@ -98,9 +98,33 @@ export function BattleScreen(): JSX.Element {
 
   const canFinish = log.length > 0;
 
+  // Workout header — drawn from the active runtime encounter.
+  // `currentExerciseIndex` / `totalExercises` give the player a
+  // sense of where they are inside the selected workout (e.g.
+  // "Encounter 2 of 4" — counting the variant chooser list, not
+  // continuation phases). The chooser still lets them switch.
+  const activeEncounter = useWorkoutGameStore((s) => s.activeEncounter);
+  const totalExercises = variants.length;
+  const currentExerciseIndex = Math.max(
+    0,
+    variants.findIndex((v) => v.id === variant.id),
+  );
+
   return (
     <SafeAreaView style={styles.safe}>
       <ScrollView contentContainerStyle={styles.scroll}>
+        {/* Workout header — only when there's an active runtime
+            encounter (always true in normal flow). */}
+        <View testID="battle-workout-header" style={styles.workoutHeader}>
+          <Text style={styles.workoutLabel} numberOfLines={1}>
+            {activeEncounter.workoutName.toUpperCase()}
+          </Text>
+          <Text style={styles.workoutMeta}>
+            {variant.name} · Encounter {currentExerciseIndex + 1} of{' '}
+            {totalExercises}
+          </Text>
+        </View>
+
         {/* Enemy + HP */}
         <View style={styles.enemyBlock}>
           <Text style={styles.enemyLabel}>{currentEnemy.name.toUpperCase()}</Text>
@@ -409,6 +433,23 @@ const styles = StyleSheet.create({
     padding: workoutSpacing.lg,
     gap: workoutSpacing.lg,
     flexGrow: 1,
+  },
+  workoutHeader: {
+    alignItems: 'center',
+    gap: 2,
+    paddingTop: workoutSpacing.sm,
+    paddingHorizontal: workoutSpacing.md,
+  },
+  workoutLabel: {
+    ...workoutType.caption,
+    color: workoutColors.ember,
+    letterSpacing: 3,
+    fontWeight: '700',
+    fontSize: 13,
+  },
+  workoutMeta: {
+    ...workoutType.caption,
+    color: workoutColors.textSecondary,
   },
   enemyBlock: {
     alignItems: 'center',

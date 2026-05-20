@@ -202,6 +202,28 @@ emotional texture of the long game. They do not expand MVP scope.
     imported templates. Orchestrator encounter still hardwired
     to Push Day — full template→encounter wire is a
     documented next-branch follow-up.
+25. [`025-template-to-quest-integration.md`](./025-template-to-quest-integration.md)
+    — bridges the workout-authoring foundation (024) to the
+    combat orchestrator. New pure adapter
+    `apps/workout/src/workouts/templateToQuest.ts` converts a
+    `WorkoutTemplate` into a `RuntimeEncounter` (the existing
+    `Encounter` + `QuestDefinition` + `EnemyInput` triple).
+    Store gains an `activeEncounter` slot; every Push-fixture
+    import is removed in favour of reading from the runtime
+    encounter. `setSelectedTemplate` eagerly rebuilds the
+    encounter (home preview updates); `startQuest` rebuilds
+    again from the latest template. Enemy flavour derives from
+    the dominant exercise archetype (heavy → "Burden of Iron"
+    / ward / stone, recovery → "Knotted Drift" / hollow /
+    hush, etc.). Push Day uses an `enemyOverride` (Sluggard)
+    for back-compat; its `nextPhaseEnemyOverride` keeps the
+    Lingering Shadow continuation. Set memory keys are
+    template-driven and existing Push Day rows still resolve.
+    New `workout_template_id` column on `workout_settings`
+    (additive migration); bridge load+save fire-and-forget.
+    BattleScreen shows workout name + "Encounter N of M";
+    RewardScreen shows the workout and the distinct exercises
+    completed.
 
 ### Branch — Product parity pass
 

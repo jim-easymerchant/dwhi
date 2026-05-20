@@ -37,3 +37,9 @@ export type {
   WorkoutModality,
   WorkoutTemplate,
 } from './types';
+
+export {
+  __testExports as __templateToQuestTestExports,
+  templateToRuntimeEncounter,
+  type RuntimeEncounter,
+} from './templateToQuest';

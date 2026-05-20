@@ -27,17 +27,16 @@ import {
   TavernStatusRow,
 } from '../components/tavern';
 import {
-  PUSH_BODYWEIGHT_STRATEGIES,
-  PUSH_WEIGHTED_VARIANTS,
-  SLUGGARD,
-} from '../fixtures/pushDayQuest';
-import {
   computeDaysSinceLastQuest,
   useWorkoutGameStore,
 } from '../state/workoutGameStore';
 import { getAmbientSceneFlavor, getTheme } from '../theme';
 import { generateNightlyWorld } from '../world';
-import { findTemplate, listAllTemplates } from '../workouts';
+import {
+  findTemplate,
+  listAllTemplates,
+  templateToRuntimeEncounter,
+} from '../workouts';
 import {
   workoutColors,
   workoutRadii,
@@ -89,25 +88,38 @@ export function HomeScreen(): JSX.Element {
   // daily) glued to the static theme/tier flavor.
   const sceneFlavorLine = `${sceneFlavor} ${world.weatherLine}`.trim();
 
-  // Exercise previews — read from the static encounter fixtures.
-  // The home screen never starts a Quest with these names; it only
-  // shows them as a preview so the player knows what they're
-  // signing up for.
-  const bodyweightNames = React.useMemo(
-    () => PUSH_BODYWEIGHT_STRATEGIES.map((v) => v.name),
-    [],
-  );
-  const weightedNames = React.useMemo(
-    () => PUSH_WEIGHTED_VARIANTS.map((v) => v.name),
-    [],
-  );
-
-  // The selected workout template — currently only used for
-  // labelling the "active workout" hint. The orchestrator
-  // encounter is still the Push Day fixture in v1; the next
-  // branch will route the template into `runQuest` directly.
+  // The currently-selected workout template drives:
+  //   - the "ACTIVE WORKOUT" panel name
+  //   - the quest cards' exercise previews (per modality)
+  //   - the threat-line enemy (preview of the actual primary enemy)
+  //   - the runtime encounter (built at `startQuest()` time)
+  // Falls back to Push Day if the id is unknown (e.g. a stale
+  // persisted value for a deleted template).
   const selectedTemplate = findTemplate(selectedTemplateId);
   const totalTemplates = listAllTemplates().length;
+  const previewEnemy = React.useMemo(
+    () =>
+      selectedTemplate
+        ? templateToRuntimeEncounter(selectedTemplate).primaryEnemy
+        : null,
+    [selectedTemplate],
+  );
+
+  // Exercise previews — derived from the selected template's
+  // exercises, split by modality.
+  const previewSource = selectedTemplate?.exercises ?? [];
+  const bodyweightNames = React.useMemo(
+    () =>
+      previewSource
+        .filter((e) => e.modality === 'bodyweight')
+        .map((e) => e.name),
+    [previewSource],
+  );
+  const weightedNames = React.useMemo(
+    () =>
+      previewSource.filter((e) => e.modality === 'weighted').map((e) => e.name),
+    [previewSource],
+  );
 
   return (
     // edges="bottom" so the SafeAreaView does NOT inset the top —
@@ -173,7 +185,9 @@ export function HomeScreen(): JSX.Element {
         <QuestSelectionPanel
           testID="home-quest-panel"
           sectionLabel={theme.questCard.sectionLabel}
-          threatLine={theme.questCard.threatLine(SLUGGARD.name)}
+          threatLine={theme.questCard.threatLine(
+            previewEnemy?.name ?? 'The Stillness',
+          )}
           bodyweightActionLabel={theme.questCard.bodyweightLabel}
           weightedActionLabel={theme.questCard.weightedLabel}
           bodyweightExercises={bodyweightNames}

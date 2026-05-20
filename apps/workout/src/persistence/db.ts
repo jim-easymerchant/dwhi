@@ -322,6 +322,9 @@ async function runInit(): Promise<void> {
   // product-parity branch (021). Older installs that already have
   // the workout_settings row carry it forward without breakage.
   await addColumnIfMissing('workout_settings', 'weight_unit', 'TEXT');
+  // Additive column: workout_template_id (branch 025). Older
+  // installs default to NULL → bridge falls back to 'push-day'.
+  await addColumnIfMissing('workout_settings', 'workout_template_id', 'TEXT');
 
   await createIndexIfColumnExists(
     'idx_workout_set_memory_exercise',

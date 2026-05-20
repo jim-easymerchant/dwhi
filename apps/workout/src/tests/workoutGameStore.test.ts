@@ -15,6 +15,7 @@ import {
 import {
   DEFAULT_PRIOR_MOMENTUM,
   PUSH_BODYWEIGHT_STRATEGIES,
+  PUSH_ENCOUNTER,
   PUSH_WEIGHTED_VARIANTS,
   SLUGGARD,
   LINGERING_SHADOW,
@@ -394,6 +395,7 @@ describe('__test__.buildSetInputsFromLog', () => {
         },
       ],
       75,
+      PUSH_ENCOUNTER,
     );
     expect(inputs[0].exerciseChanged).toBe(false);
     expect(inputs[1].exerciseChanged).toBe(false);

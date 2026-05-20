@@ -37,6 +37,9 @@ jest.mock('../persistence', () => {
   const loadAllWorkoutTemplates = jest.fn().mockResolvedValue([]);
   const saveWorkoutTemplate = jest.fn().mockResolvedValue(true);
   const deleteWorkoutTemplate = jest.fn().mockResolvedValue(true);
+  // Selected-template id — added by the template-to-quest branch (025).
+  const loadStoredWorkoutTemplateId = jest.fn().mockResolvedValue(null);
+  const saveStoredWorkoutTemplateId = jest.fn().mockResolvedValue(true);
   return {
     saveSetMemory,
     loadAllSetMemory,
@@ -59,6 +62,8 @@ jest.mock('../persistence', () => {
     loadAllWorkoutTemplates,
     saveWorkoutTemplate,
     deleteWorkoutTemplate,
+    loadStoredWorkoutTemplateId,
+    saveStoredWorkoutTemplateId,
   };
 });
 

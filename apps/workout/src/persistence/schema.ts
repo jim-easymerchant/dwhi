@@ -108,10 +108,11 @@ export const WORKOUT_SCHEMA_STATEMENTS = [
   // additively without breaking existing installs.
   // -----------------------------------------------------------------------
   `CREATE TABLE IF NOT EXISTS workout_settings (
-    id              TEXT PRIMARY KEY,
-    theme_id        TEXT,
-    weight_unit     TEXT,
-    updated_at_iso  TEXT
+    id                  TEXT PRIMARY KEY,
+    theme_id            TEXT,
+    weight_unit         TEXT,
+    workout_template_id TEXT,
+    updated_at_iso      TEXT
   );`,
 
   // -----------------------------------------------------------------------

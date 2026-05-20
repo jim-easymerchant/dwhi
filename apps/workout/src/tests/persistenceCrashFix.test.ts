@@ -37,6 +37,9 @@ jest.mock('../persistence', () => {
     loadAllWorkoutTemplates: jest.fn().mockResolvedValue([]),
     saveWorkoutTemplate: jest.fn().mockResolvedValue(true),
     deleteWorkoutTemplate: jest.fn().mockResolvedValue(true),
+    // Selected-template id — added by the template-to-quest branch (025).
+    loadStoredWorkoutTemplateId: jest.fn().mockResolvedValue(null),
+    saveStoredWorkoutTemplateId: jest.fn().mockResolvedValue(true),
     __testResetDisabled: () => {
       disabledReason = null;
     },

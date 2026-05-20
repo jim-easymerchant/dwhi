@@ -173,6 +173,17 @@ async function bootPersistence(): Promise<void> {
           console.warn('[workout._layout] persistWeightUnit rejected:', e);
         });
       },
+      onSelectedTemplateChanged: (templateId) => {
+        bridge
+          .persistSelectedWorkoutTemplate(templateId)
+          .catch((e) => {
+            // eslint-disable-next-line no-console
+            console.warn(
+              '[workout._layout] persistSelectedWorkoutTemplate rejected:',
+              e,
+            );
+          });
+      },
     });
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);

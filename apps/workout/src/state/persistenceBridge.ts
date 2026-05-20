@@ -32,12 +32,14 @@ import {
   loadSessionCountSince,
   loadStoredThemeId,
   loadStoredWeightUnit,
+  loadStoredWorkoutTemplateId,
   loadTotalQuestXp,
   recordIfPersonalRecord,
   savePlayerMomentum,
   saveSetMemory,
   saveStoredThemeId,
   saveStoredWeightUnit,
+  saveStoredWorkoutTemplateId,
   saveWorkoutTemplate,
   type PRKind,
   type PRLookupKey,
@@ -122,6 +124,7 @@ export async function hydratePersistence(): Promise<HydrationResult> {
       totalQuestXp,
       recentSessionsCount,
       persistedTemplates,
+      storedWorkoutTemplateId,
     ] = await Promise.all([
       loadAllSetMemory().catch((e) => {
         // eslint-disable-next-line no-console
@@ -166,6 +169,14 @@ export async function hydratePersistence(): Promise<HydrationResult> {
         );
         return [];
       }),
+      loadStoredWorkoutTemplateId().catch((e) => {
+        // eslint-disable-next-line no-console
+        console.warn(
+          '[workout.persistence] loadStoredWorkoutTemplateId failed:',
+          e,
+        );
+        return null;
+      }),
     ]);
 
     // Seed the in-memory workout library from persisted rows.
@@ -184,6 +195,24 @@ export async function hydratePersistence(): Promise<HydrationResult> {
       }
     }
     setImportedTemplatesForHydration(importedTemplates);
+
+    // Resolve the persisted workout-template-id to a runtime
+    // encounter. Unknown ids (deleted template, stale row) fall
+    // back to Push Day. The store will rebuild the runtime
+    // encounter at the next `startQuest()`, but we seed
+    // `activeEncounter` here too so the home screen reflects the
+    // right workout *before* the first quest.
+    // eslint-disable-next-line @typescript-eslint/no-require-imports, global-require
+    const wk = require('../workouts') as typeof import('../workouts');
+    const resolvedTemplateId =
+      typeof storedWorkoutTemplateId === 'string' &&
+      wk.findTemplate(storedWorkoutTemplateId) !== undefined
+        ? storedWorkoutTemplateId
+        : 'push-day';
+    const resolvedTemplate = wk.findTemplate(resolvedTemplateId);
+    const resolvedRuntime = resolvedTemplate
+      ? wk.templateToRuntimeEncounter(resolvedTemplate)
+      : null;
 
     const setMemory: SetMemory = {};
     for (const [k, v] of Object.entries(memoryMap)) {
@@ -204,6 +233,8 @@ export async function hydratePersistence(): Promise<HydrationResult> {
       weightUnit: safeWeightUnit(storedWeightUnit),
       cumulativeXp: Math.max(0, totalQuestXp ?? 0),
       recentSessionsCount: Math.max(0, recentSessionsCount ?? 0),
+      selectedTemplateId: resolvedTemplateId,
+      ...(resolvedRuntime ? { activeEncounter: resolvedRuntime } : {}),
       persistenceReady: true,
       persistenceDisabled: false,
       persistenceError: null,
@@ -441,6 +472,25 @@ export async function persistWeightUnit(unit: string): Promise<void> {
   } catch (e) {
     // eslint-disable-next-line no-console
     console.warn('[workout.persistence] persistWeightUnit failed:', e);
+  }
+}
+
+/**
+ * Save the player's selected workout-template id. Fire-and-forget;
+ * resolves regardless of outcome.
+ */
+export async function persistSelectedWorkoutTemplate(
+  templateId: string,
+): Promise<void> {
+  if (isPersistenceDisabled()) return;
+  try {
+    await saveStoredWorkoutTemplateId(templateId);
+  } catch (e) {
+    // eslint-disable-next-line no-console
+    console.warn(
+      '[workout.persistence] persistSelectedWorkoutTemplate failed:',
+      e,
+    );
   }
 }
 

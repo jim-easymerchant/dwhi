@@ -11,7 +11,11 @@
  * the original Push Day fixture.
  */
 
-import { EXERCISE_PROFILES } from '../fixtures/pushDayQuest';
+import {
+  EXERCISE_PROFILES,
+  SLUGGARD,
+  getNextEnemyPhase,
+} from '../fixtures/pushDayQuest';
 import type { WorkoutExercise, WorkoutTemplate } from './types';
 
 // Stable-but-arbitrary createdAt for built-ins. The exact value
@@ -48,7 +52,14 @@ export const BUILTIN_PUSH_DAY: WorkoutTemplate = {
   defaultModality: 'weighted',
   source: 'builtin',
   createdAtIso: BUILTIN_CREATED_AT,
+  // Back-compat hatch: Push Day predates the template adapter
+  // and uses the handcrafted Sluggard + Lingering-Shadow enemy
+  // pair from `pushDayQuest.ts`. Other built-ins get the
+  // adapter's auto-derived enemy (archetype-driven name/HP).
+  enemyOverride: SLUGGARD,
+  nextPhaseEnemyOverride: getNextEnemyPhase,
   exercises: [
+    // ---- weighted variants (in the same order as the legacy fixture) ----
     ex({
       name: 'Bench Press',
       modality: 'weighted',
@@ -84,6 +95,7 @@ export const BUILTIN_PUSH_DAY: WorkoutTemplate = {
       defaultWeightKg: 7.5,
       defaultRestSeconds: 60,
     }),
+    // ---- bodyweight variants (mirrors PUSH_BODYWEIGHT_STRATEGIES) ----
     ex({
       name: 'Pushup',
       modality: 'bodyweight',
@@ -92,6 +104,50 @@ export const BUILTIN_PUSH_DAY: WorkoutTemplate = {
       inputKind: 'reps',
       defaultSets: 3,
       defaultReps: 10,
+      defaultRestSeconds: 60,
+    }),
+    ex({
+      id: 'pike-pushup',
+      name: 'Pike Pushup',
+      modality: 'bodyweight',
+      archetype: 'pressure',
+      profile: EXERCISE_PROFILES.pikePushup,
+      inputKind: 'reps',
+      defaultSets: 3,
+      defaultReps: 8,
+      defaultRestSeconds: 60,
+    }),
+    ex({
+      id: 'diamond-pushup',
+      name: 'Diamond Pushup',
+      modality: 'bodyweight',
+      archetype: 'pressure',
+      profile: EXERCISE_PROFILES.diamondPushup,
+      inputKind: 'reps',
+      defaultSets: 3,
+      defaultReps: 10,
+      defaultRestSeconds: 60,
+    }),
+    ex({
+      id: 'incline-pushup',
+      name: 'Incline Pushup',
+      modality: 'bodyweight',
+      archetype: 'pressure',
+      profile: EXERCISE_PROFILES.inclinePushup,
+      inputKind: 'reps',
+      defaultSets: 3,
+      defaultReps: 12,
+      defaultRestSeconds: 60,
+    }),
+    ex({
+      id: 'knee-pushup',
+      name: 'Knee Pushup',
+      modality: 'bodyweight',
+      archetype: 'pressure',
+      profile: EXERCISE_PROFILES.kneePushup,
+      inputKind: 'reps',
+      defaultSets: 3,
+      defaultReps: 12,
       defaultRestSeconds: 60,
     }),
   ],

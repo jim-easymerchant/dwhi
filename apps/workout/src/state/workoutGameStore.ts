@@ -25,9 +25,6 @@ import type {
 import {
   DEFAULT_BODYWEIGHT_KG,
   DEFAULT_PRIOR_MOMENTUM,
-  PUSH_DAY_QUEST,
-  PUSH_ENCOUNTER,
-  SLUGGARD,
   findVariant,
   getNextEnemyPhase,
   variantsFor,
@@ -74,6 +71,8 @@ export interface PersistenceHandlers {
   onThemeChanged?: (themeId: string) => void;
   /** Fired when the player toggles their weight-unit preference. */
   onWeightUnitChanged?: (unit: 'lb' | 'kg') => void;
+  /** Fired when the player picks a different workout template. */
+  onSelectedTemplateChanged?: (templateId: string) => void;
 }
 
 let handlers: PersistenceHandlers = {};
@@ -203,8 +202,14 @@ export function lookupSetMemory(
 // Store interface
 // ---------------------------------------------------------------------------
 
-const ENCOUNTER = PUSH_ENCOUNTER;
 const STATIC_NOW_ISO = '2026-05-19T10:00:00Z';
+
+// The default runtime encounter — Push Day rendered through the
+// template adapter. Constructed lazily because it depends on the
+// workouts barrel, which is module-graph-adjacent.
+import { BUILTIN_PUSH_DAY, templateToRuntimeEncounter, type RuntimeEncounter } from '../workouts';
+const DEFAULT_RUNTIME_ENCOUNTER: RuntimeEncounter =
+  templateToRuntimeEncounter(BUILTIN_PUSH_DAY);
 
 export interface WorkoutGameState {
   // --- top-level navigation ---
@@ -232,17 +237,19 @@ export interface WorkoutGameState {
   /** Currently selected theme pack id ('momentum' or 'ironquest-classic'). */
   selectedThemeId: string;
   /**
-   * Currently selected workout template id — drives which card is
-   * highlighted on the home screen and which template's name shows
-   * up on the BattleScreen header. Defaults to 'push-day' so the
-   * existing encounter remains the canonical first quest.
-   *
-   * NB v1 limitation: the orchestrator's encounter shape is still
-   * the Push Day fixture; the displayed template is used for
-   * labelling. Future branch: drive variants from the selected
-   * template's exercises.
+   * Currently selected workout template id. Drives which card is
+   * highlighted on the home screen AND, since branch 025, which
+   * template is converted into the active encounter when the
+   * player taps Begin. Defaults to 'push-day'.
    */
   selectedTemplateId: string;
+  /**
+   * Runtime encounter for the in-progress (or last-started) quest.
+   * Built by `templateToRuntimeEncounter()` at `startQuest()` time.
+   * Replaces the formerly-hardwired Push Day fixture triple that
+   * the store used to import directly.
+   */
+  activeEncounter: RuntimeEncounter;
   /** User-facing weight unit ('lb' default; 'kg' alternative). */
   weightUnit: 'lb' | 'kg';
   /** Cumulative XP across every persisted completed Quest. Drives
@@ -320,17 +327,24 @@ export interface WorkoutGameState {
 // Helpers
 // ---------------------------------------------------------------------------
 
-function variantFor(state: Pick<WorkoutGameState, 'modality' | 'currentVariantId'>): ExerciseVariant {
-  return findVariant(ENCOUNTER, state.modality, state.currentVariantId);
+function variantFor(
+  state: Pick<WorkoutGameState, 'modality' | 'currentVariantId' | 'activeEncounter'>,
+): ExerciseVariant {
+  return findVariant(
+    state.activeEncounter.encounter,
+    state.modality,
+    state.currentVariantId,
+  );
 }
 
 function defaultsFor(
+  encounter: import('../fixtures/pushDayQuest').Encounter,
   modality: Variant,
   variantId: string,
   setIndex: number,
   memory: SetMemory,
 ): { reps: number; weightKg: number } {
-  const variant = findVariant(ENCOUNTER, modality, variantId);
+  const variant = findVariant(encounter, modality, variantId);
   const memoryHit = lookupSetMemory(memory, {
     exerciseId: variant.id,
     modality,
@@ -349,15 +363,16 @@ function defaultsFor(
 function buildSetInputsFromLog(
   log: readonly LoggedSet[],
   bodyweightKg: number,
+  encounter: import('../fixtures/pushDayQuest').Encounter,
 ): SetInput[] {
   // The first set after a variant change carries `exerciseChanged: true`
   // for fatigue refund + heavy first-set bonus eligibility.
   return log.map((row, i) => {
     const prior = i > 0 ? log[i - 1] : null;
     const exerciseChanged = prior !== null && prior.exerciseId !== row.exerciseId;
-    const variant = ENCOUNTER.bodyweightStrategies.concat(
-      ENCOUNTER.weightedVariants,
-    ).find((v) => v.id === row.exerciseId);
+    const variant = encounter.bodyweightStrategies
+      .concat(encounter.weightedVariants)
+      .find((v) => v.id === row.exerciseId);
     return {
       exerciseId: row.exerciseId,
       exerciseName: row.exerciseName,
@@ -376,10 +391,17 @@ function buildSetInputsFromLog(
   });
 }
 
-/** A huge enemy used only as a *projection* target so set damage is
- * not capped at remaining HP. The shell tracks phase HP manually. */
+/**
+ * A huge enemy used only as a *projection* target so set damage
+ * is not capped at remaining HP. The shell tracks phase HP
+ * manually. The enemy's flavour fields don't matter for the
+ * projection — only `maxHp` does.
+ */
 const PROJECTION_ENEMY: EnemyInput = {
-  ...SLUGGARD,
+  id: 'projection-target',
+  name: 'projection',
+  mood: 'drift',
+  category: 'lesser_fragment',
   maxHp: 1_000_000,
 };
 
@@ -403,11 +425,13 @@ function projectFinalSetDamage(
   log: readonly LoggedSet[],
   bodyweightKg: number,
   priorMomentum: number,
+  encounter: import('./../fixtures/pushDayQuest').Encounter,
+  quest: import('@dwhi/workout-domain').QuestDefinition,
 ): number {
   if (log.length === 0) return 0;
-  const sets = buildSetInputsFromLog(log, bodyweightKg);
+  const sets = buildSetInputsFromLog(log, bodyweightKg, encounter);
   const projection = runQuest({
-    quest: PUSH_DAY_QUEST,
+    quest,
     enemy: PROJECTION_ENEMY,
     sets,
     priorMomentum,
@@ -421,9 +445,16 @@ function projectFinalSetDamage(
 // Initial state
 // ---------------------------------------------------------------------------
 
-const INITIAL_VARIANT = ENCOUNTER.bodyweightStrategies[0];
+const INITIAL_ENCOUNTER = DEFAULT_RUNTIME_ENCOUNTER.encounter;
+const INITIAL_VARIANT = INITIAL_ENCOUNTER.bodyweightStrategies[0];
 
-const initialDefaults = defaultsFor('bodyweight', INITIAL_VARIANT.id, 0, {});
+const initialDefaults = defaultsFor(
+  INITIAL_ENCOUNTER,
+  'bodyweight',
+  INITIAL_VARIANT.id,
+  0,
+  {},
+);
 
 // ---------------------------------------------------------------------------
 // Store
@@ -446,6 +477,10 @@ export const useWorkoutGameStore = create<WorkoutGameState>((set, get) => ({
 
   // Default highlighted template — the original Push Day.
   selectedTemplateId: 'push-day',
+  // Default runtime encounter — Push Day, generated through the
+  // template adapter. Re-built at each `startQuest()` from
+  // `selectedTemplateId`.
+  activeEncounter: DEFAULT_RUNTIME_ENCOUNTER,
 
   // Weight-unit display preference. Defaults to pounds; hydration
   // overrides from the persisted preference if any.
@@ -468,8 +503,8 @@ export const useWorkoutGameStore = create<WorkoutGameState>((set, get) => ({
   draftReps: initialDefaults.reps,
   draftWeightKg: initialDefaults.weightKg,
 
-  currentEnemy: SLUGGARD,
-  currentEnemyHp: SLUGGARD.maxHp,
+  currentEnemy: DEFAULT_RUNTIME_ENCOUNTER.primaryEnemy,
+  currentEnemyHp: DEFAULT_RUNTIME_ENCOUNTER.primaryEnemy.maxHp,
   enemyPhaseIndex: 0,
   lastSetDamage: null,
   victoryAvailable: false,
@@ -490,9 +525,26 @@ export const useWorkoutGameStore = create<WorkoutGameState>((set, get) => ({
   // -------------------------------------------------------------------
   startQuest: (modality) => {
     const s = get();
-    const list = variantsFor(ENCOUNTER, modality);
+    // Build the runtime encounter from the currently-selected
+    // template. Falls back to the default Push Day runtime if the
+    // id is unknown (e.g. a stale persisted value referencing a
+    // template the user has since deleted).
+    // eslint-disable-next-line @typescript-eslint/no-require-imports, global-require
+    const wk = require('../workouts') as typeof import('../workouts');
+    const template = wk.findTemplate(s.selectedTemplateId);
+    const runtime = template
+      ? wk.templateToRuntimeEncounter(template)
+      : DEFAULT_RUNTIME_ENCOUNTER;
+
+    const list = variantsFor(runtime.encounter, modality);
     const firstVariant = list[0];
-    const draft = defaultsFor(modality, firstVariant.id, 0, s.setMemory);
+    const draft = defaultsFor(
+      runtime.encounter,
+      modality,
+      firstVariant.id,
+      0,
+      s.setMemory,
+    );
     // Seed player HP for this quest from the pure formula. The
     // value is captured once at quest start; in-quest pressure
     // shaves it during rest transitions.
@@ -508,12 +560,13 @@ export const useWorkoutGameStore = create<WorkoutGameState>((set, get) => ({
     set(() => ({
       phase: 'battle',
       modality,
+      activeEncounter: runtime,
       currentVariantId: firstVariant.id,
       currentSetIndexInVariant: 0,
       draftReps: draft.reps,
       draftWeightKg: draft.weightKg,
-      currentEnemy: SLUGGARD,
-      currentEnemyHp: SLUGGARD.maxHp,
+      currentEnemy: runtime.primaryEnemy,
+      currentEnemyHp: runtime.primaryEnemy.maxHp,
       enemyPhaseIndex: 0,
       lastSetDamage: null,
       victoryAvailable: false,
@@ -536,7 +589,26 @@ export const useWorkoutGameStore = create<WorkoutGameState>((set, get) => ({
   // -------------------------------------------------------------------
   setSelectedTemplate: (templateId) => {
     if (typeof templateId !== 'string' || templateId.length === 0) return;
-    set(() => ({ selectedTemplateId: templateId }));
+    // Eagerly rebuild the runtime encounter so the home-screen
+    // surfaces (workout name, exercise preview) update without
+    // waiting for the next `startQuest()`. Unknown ids preserve
+    // the previous activeEncounter — they're stored either way
+    // so that a later import / built-in update can resolve them.
+    let nextActiveEncounter: RuntimeEncounter | undefined;
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports, global-require
+      const wk = require('../workouts') as typeof import('../workouts');
+      const t = wk.findTemplate(templateId);
+      if (t) nextActiveEncounter = wk.templateToRuntimeEncounter(t);
+    } catch {
+      // workouts module unreachable — keep the current encounter.
+    }
+    set((s) => ({
+      selectedTemplateId: templateId,
+      activeEncounter: nextActiveEncounter ?? s.activeEncounter,
+    }));
+    // Fire-and-forget persistence.
+    handlers.onSelectedTemplateChanged?.(templateId);
   },
 
   // -------------------------------------------------------------------
@@ -622,7 +694,13 @@ export const useWorkoutGameStore = create<WorkoutGameState>((set, get) => ({
     };
 
     const probeLog = [...s.log, provisionalRow];
-    const damage = projectFinalSetDamage(probeLog, s.bodyweightKg, s.priorMomentum);
+    const damage = projectFinalSetDamage(
+      probeLog,
+      s.bodyweightKg,
+      s.priorMomentum,
+      s.activeEncounter.encounter,
+      s.activeEncounter.quest,
+    );
     provisionalRow.damage = damage;
 
     const newPhaseHp = Math.max(0, s.currentEnemyHp - damage);
@@ -666,6 +744,7 @@ export const useWorkoutGameStore = create<WorkoutGameState>((set, get) => ({
     const nextSetIndex = s.currentSetIndexInVariant + 1;
     const nextMemory = { ...s.setMemory, [memKey]: memoryEntry };
     const nextDraft = defaultsFor(
+      s.activeEncounter.encounter,
       s.modality,
       variant.id,
       nextSetIndex,
@@ -720,10 +799,16 @@ export const useWorkoutGameStore = create<WorkoutGameState>((set, get) => ({
   // -------------------------------------------------------------------
   switchVariant: (variantId) => {
     const s = get();
-    const list = variantsFor(ENCOUNTER, s.modality);
+    const list = variantsFor(s.activeEncounter.encounter, s.modality);
     const found = list.find((v) => v.id === variantId);
     if (!found) return;
-    const draft = defaultsFor(s.modality, found.id, 0, s.setMemory);
+    const draft = defaultsFor(
+      s.activeEncounter.encounter,
+      s.modality,
+      found.id,
+      0,
+      s.setMemory,
+    );
     set(() => ({
       currentVariantId: found.id,
       currentSetIndexInVariant: 0,
@@ -736,7 +821,13 @@ export const useWorkoutGameStore = create<WorkoutGameState>((set, get) => ({
   continueAfterVictory: () => {
     const s = get();
     if (!s.victoryAvailable) return;
-    const nextEnemy = getNextEnemyPhase(s.currentEnemy.maxHp);
+    // Each runtime encounter brings its own `nextPhaseEnemy`
+    // continuation rule (halving HP, flavour-matched name). Falls
+    // back to the existing Push-Day helper if for some reason the
+    // active encounter is missing one.
+    const nextEnemy =
+      s.activeEncounter.nextPhaseEnemy?.(s.currentEnemy.maxHp) ??
+      getNextEnemyPhase(s.currentEnemy.maxHp);
     set(() => ({
       enemyPhaseIndex: s.enemyPhaseIndex + 1,
       currentEnemy: nextEnemy,
@@ -761,14 +852,19 @@ export const useWorkoutGameStore = create<WorkoutGameState>((set, get) => ({
   finishQuest: () => {
     const s = get();
     if (s.log.length === 0) return;
-    const sets = buildSetInputsFromLog(s.log, s.bodyweightKg);
+    const sets = buildSetInputsFromLog(
+      s.log,
+      s.bodyweightKg,
+      s.activeEncounter.encounter,
+    );
 
     // Bug 3 (open-battle-fixes) — Expand plannedSetCount by the
     // number of continuation phases the player explicitly committed
     // to. Orchestrator anti-grind stays intact; the plan reflects
     // what the player chose to do.
+    const activeQuest = s.activeEncounter.quest;
     const expandedPlannedSetCount =
-      PUSH_DAY_QUEST.plannedSetCount +
+      activeQuest.plannedSetCount +
       s.continuationCount * PLAN_EXPANSION_PER_CONTINUATION;
 
     // Days since last quest is now real (persisted across launches),
@@ -777,8 +873,8 @@ export const useWorkoutGameStore = create<WorkoutGameState>((set, get) => ({
     const days = computeDaysSinceLastQuest(s.lastSessionAtIso);
 
     const result = runQuest({
-      quest: { ...PUSH_DAY_QUEST, plannedSetCount: expandedPlannedSetCount },
-      enemy: SLUGGARD,
+      quest: { ...activeQuest, plannedSetCount: expandedPlannedSetCount },
+      enemy: s.activeEncounter.primaryEnemy,
       sets,
       priorMomentum: s.priorMomentum,
       daysSinceLastQuest: days,
@@ -798,11 +894,14 @@ export const useWorkoutGameStore = create<WorkoutGameState>((set, get) => ({
       recentSessionsCount: s.recentSessionsCount + 1,
     }));
 
-    // Fire-and-forget — saves momentum + appends history.
+    // Fire-and-forget — saves momentum + appends history. The
+    // template id + kind come from the active runtime quest so
+    // the persisted history reflects what the player actually
+    // did, not a hardwired "push_day" string.
     handlers.onQuestCompleted?.({
       questId: `quest-${Date.now()}`,
-      templateId: PUSH_DAY_QUEST.templateId ?? null,
-      kind: PUSH_DAY_QUEST.kind,
+      templateId: activeQuest.templateId ?? s.activeEncounter.templateId,
+      kind: activeQuest.kind,
       workingSetCount: result.questXp.setCountForVolume,
       totalDamage: result.totalDamage,
       xp: result.questXp.xp,
@@ -814,6 +913,7 @@ export const useWorkoutGameStore = create<WorkoutGameState>((set, get) => ({
         verdicts: result.verdicts,
         rewards: result.rewards,
         momentum: result.momentum,
+        workoutName: s.activeEncounter.workoutName,
       },
     });
   },
@@ -821,16 +921,27 @@ export const useWorkoutGameStore = create<WorkoutGameState>((set, get) => ({
   // -------------------------------------------------------------------
   returnToCamp: () => {
     const s = get();
-    const draft = defaultsFor('bodyweight', INITIAL_VARIANT.id, 0, s.setMemory);
+    // Reset to the active encounter's first bodyweight variant —
+    // the home screen's quest cards still use the same encounter.
+    const encounter = s.activeEncounter.encounter;
+    const initialList = variantsFor(encounter, 'bodyweight');
+    const initialVariantId = initialList[0]?.id ?? INITIAL_VARIANT.id;
+    const draft = defaultsFor(
+      encounter,
+      'bodyweight',
+      initialVariantId,
+      0,
+      s.setMemory,
+    );
     set(() => ({
       phase: 'home',
       modality: 'bodyweight',
-      currentVariantId: INITIAL_VARIANT.id,
+      currentVariantId: initialVariantId,
       currentSetIndexInVariant: 0,
       draftReps: draft.reps,
       draftWeightKg: draft.weightKg,
-      currentEnemy: SLUGGARD,
-      currentEnemyHp: SLUGGARD.maxHp,
+      currentEnemy: s.activeEncounter.primaryEnemy,
+      currentEnemyHp: s.activeEncounter.primaryEnemy.maxHp,
       enemyPhaseIndex: 0,
       lastSetDamage: null,
       victoryAvailable: false,
@@ -856,9 +967,9 @@ export function getCurrentVariant(state: WorkoutGameState): ExerciseVariant {
 }
 
 export function getAvailableVariants(
-  state: Pick<WorkoutGameState, 'modality'>,
+  state: Pick<WorkoutGameState, 'modality' | 'activeEncounter'>,
 ): readonly ExerciseVariant[] {
-  return variantsFor(ENCOUNTER, state.modality);
+  return variantsFor(state.activeEncounter.encounter, state.modality);
 }
 
 export function getBattleProgress(state: WorkoutGameState): number {
