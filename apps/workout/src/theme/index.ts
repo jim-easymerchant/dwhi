@@ -78,3 +78,5 @@ export type {
   ThemeTone,
   ThemeUiAccent,
 } from './themeTypes';
+
+export type { ThemeWorldState } from '../world/worldTypes';

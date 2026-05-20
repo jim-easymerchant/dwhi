@@ -318,6 +318,11 @@ async function runInit(): Promise<void> {
     }
   });
 
+  // Additive column: weight_unit on workout_settings. Added in the
+  // product-parity branch (021). Older installs that already have
+  // the workout_settings row carry it forward without breakage.
+  await addColumnIfMissing('workout_settings', 'weight_unit', 'TEXT');
+
   await createIndexIfColumnExists(
     'idx_workout_set_memory_exercise',
     'workout_set_memory',

@@ -133,6 +133,59 @@ emotional texture of the long game. They do not expand MVP scope.
     zero theme-specific strings inline. Anti-shame regression
     tests reject "lazy", "skipped", "missed", "weak", "calorie",
     "bmi", etc. across every home-surface string.
+20. [`020-world-state-and-patrons.md`](./020-world-state-and-patrons.md)
+    — ambient world layer: `apps/workout/src/world/` module
+    with a deterministic `generateNightlyWorld(...)` generator,
+    an 11-entry patron roster of coaching / emotional
+    archetypes (Spotter, Quiet Runner, Hearthkeeper,
+    Archivist, Challenger, Cook, Night Janitor, Traveler, One
+    Who Stretches, Old Soldier, Newcomer), per-day rotation
+    seeded on the calendar day, theme-aware dialogue pools, and
+    bucketed world-state primitives (timeOfDay, hearthState,
+    roomEnergy, weather, activityHint). New `ThemeWorldState`
+    sub-shape on `ThemePack` (patron section label, ambient
+    density, energy bias, per-bucket weather copy). New
+    PatronsPanel component on the HomeScreen. Anti-shame +
+    no-reference-ironquest-runtime-imports regression tests
+    pin the boundary. Pure presentational — zero mechanics,
+    zero new dependencies, packages/workout-domain untouched.
+
+### Product parity & operational docs
+
+21. [`021-expo-go-setup.md`](./021-expo-go-setup.md) — fast-path
+    instructions for running the Workout RPG on a real device
+    via Expo Go (`cd apps/workout && npx expo start --clear`,
+    scan QR), plus the limits — `expo-sqlite` may be
+    unavailable in Expo Go, in which case the app flips into a
+    visible memory-only mode. Documents when to escalate to a
+    `expo-dev-client` build (persistence, household work,
+    sharing builds with non-developers) and the EAS / local
+    prebuild paths.
+22. [`022-household-integration-plan.md`](./022-household-integration-plan.md)
+    — plan-only doc (no code in this branch). Maps the
+    `@dwhi/framework` household APIs we'd reuse, the workout
+    schema's needed `member_id` / `household_id` joins, the
+    per-member vs per-household scope decisions (theme + unit
+    + history are per-member; only opt-in family views are
+    per-household), and the explicit non-goals (no Supabase,
+    no auth, no sync) for the foundation branch. Recommends
+    next branch: `claude/workout-rpg-household-foundation-…`.
+
+### Branch — Product parity pass
+
+The product-parity branch (021) added the user-facing concerns
+that surfaced during first-device testing: weight unit toggle
+(lb default), full-bleed home scene with theme-aware sign,
+prominent battle HP bar, decoupled cumulative-XP-based LEVEL
+display, the Expo Go doc, and the household integration plan.
+The leveling rebalance is the most impactful piece: previously
+the displayed LEVEL was `Math.round(priorMomentum)` (so 3
+battles → "L30"); the new derivation is
+`levelForCumulativeXp(SUM(quest_history.xp))` with the curve
+`xpForLevel(N) = floor(30 * (N-1) ^ 1.4)` — a short workout
+moves the player ~1-2 levels, L10 sits at ~10 sessions, L30 at
+~50+ sessions. The new `apps/workout/src/leveling/` module is
+pure; the curve is deterministic and tested.
 
 ### Provisioning
 

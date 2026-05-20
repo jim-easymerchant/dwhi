@@ -18,6 +18,7 @@ const SINGLETON_ID = 'default';
 interface Row {
   id: string;
   theme_id: string | null;
+  weight_unit: string | null;
   updated_at_iso: string | null;
 }
 
@@ -26,7 +27,7 @@ export async function loadStoredThemeId(): Promise<string | null> {
   try {
     const db = await getDb();
     const row = await db.getFirstAsync<Row>(
-      `SELECT id, theme_id, updated_at_iso
+      `SELECT id, theme_id, weight_unit, updated_at_iso
          FROM workout_settings
          WHERE id = ?;`,
       [SINGLETON_ID],
@@ -60,6 +61,61 @@ export async function saveStoredThemeId(themeId: string): Promise<boolean> {
   } catch (e) {
     // eslint-disable-next-line no-console
     console.warn('[workout.persistence] saveStoredThemeId failed:', e);
+    return false;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Weight-unit preference — same singleton row.
+// ---------------------------------------------------------------------------
+
+/**
+ * Read the stored weight-unit preference ('lb' / 'kg'). Returns
+ * null on missing row, malformed value, or any error — the bridge
+ * routes null to the default ('lb').
+ */
+export async function loadStoredWeightUnit(): Promise<string | null> {
+  try {
+    const db = await getDb();
+    const row = await db.getFirstAsync<Row>(
+      `SELECT id, theme_id, weight_unit, updated_at_iso
+         FROM workout_settings
+         WHERE id = ?;`,
+      [SINGLETON_ID],
+    );
+    if (!row) return null;
+    if (typeof row.weight_unit !== 'string' || row.weight_unit.length === 0) {
+      return null;
+    }
+    return row.weight_unit;
+  } catch (e) {
+    // eslint-disable-next-line no-console
+    console.warn('[workout.persistence] loadStoredWeightUnit failed:', e);
+    return null;
+  }
+}
+
+/**
+ * Save the user's weight-unit preference. Returns true on success.
+ * The settings row is upserted; `theme_id` is preserved when
+ * already set.
+ */
+export async function saveStoredWeightUnit(unit: string): Promise<boolean> {
+  if (typeof unit !== 'string' || unit.length === 0) return false;
+  try {
+    const db = await getDb();
+    await db.runAsync(
+      `INSERT INTO workout_settings (id, weight_unit, updated_at_iso)
+       VALUES (?, ?, ?)
+       ON CONFLICT(id) DO UPDATE SET
+         weight_unit    = excluded.weight_unit,
+         updated_at_iso = excluded.updated_at_iso;`,
+      [SINGLETON_ID, unit, nowIso()],
+    );
+    return true;
+  } catch (e) {
+    // eslint-disable-next-line no-console
+    console.warn('[workout.persistence] saveStoredWeightUnit failed:', e);
     return false;
   }
 }

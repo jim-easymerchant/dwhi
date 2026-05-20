@@ -17,6 +17,8 @@
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
+import { levelForCumulativeXp } from '../../leveling';
+import { formatWeight, type WeightUnit } from '../../units';
 import {
   workoutColors,
   workoutRadii,
@@ -25,9 +27,14 @@ import {
 } from '../../theme/workoutColors';
 
 export interface TavernStatusRowProps {
-  momentum: number;
+  /** Cumulative quest XP — drives the displayed LEVEL via the
+   *  leveling curve. Not the same as priorMomentum. */
+  cumulativeXp: number;
   daysSinceLastQuest: number;
   bodyweightKg: number;
+  /** User-facing weight unit. The card formats bodyweight via
+   *  `formatWeight(kg, unit)`. */
+  weightUnit: WeightUnit;
   /** Accent colour used for the LEVEL value (theme.uiAccent.primary). */
   accentColor: string;
   testID?: string;
@@ -44,19 +51,19 @@ function formatDaysSince(days: number): string {
 }
 
 export function TavernStatusRow({
-  momentum,
+  cumulativeXp,
   daysSinceLastQuest,
   bodyweightKg,
+  weightUnit,
   accentColor,
   testID,
 }: TavernStatusRowProps): JSX.Element {
+  const level = levelForCumulativeXp(cumulativeXp);
   return (
     <View testID={testID} style={styles.row}>
       <View testID="status-card-level" style={styles.card}>
         <Text style={styles.label}>LEVEL</Text>
-        <Text style={[styles.value, { color: accentColor }]}>
-          {Math.round(momentum)}
-        </Text>
+        <Text style={[styles.value, { color: accentColor }]}>{level}</Text>
       </View>
       <View testID="status-card-last" style={styles.card}>
         <Text style={styles.label}>LAST</Text>
@@ -64,7 +71,9 @@ export function TavernStatusRow({
       </View>
       <View testID="status-card-weight" style={styles.card}>
         <Text style={styles.label}>WEIGHT</Text>
-        <Text style={styles.value}>{Math.round(bodyweightKg)} kg</Text>
+        <Text style={styles.value}>
+          {formatWeight(bodyweightKg, weightUnit)}
+        </Text>
       </View>
     </View>
   );

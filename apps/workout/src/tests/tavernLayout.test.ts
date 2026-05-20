@@ -314,9 +314,12 @@ describe('HomeScreen content boundary', () => {
   test('HomeScreen composes tavern components, not raw layout primitives for sections', () => {
     // We expect tavern barrel imports.
     expect(text).toMatch(/from\s+['"][^'"]*components\/tavern['"]/);
-    // And the eight component names should each appear at least once.
+    // The tavern component names that the HomeScreen composes
+    // should each appear at least once. (`TavernHeader` is no
+    // longer composed here — the product-parity branch absorbed
+    // the gear button + theme sign into `TavernSceneFrame` to
+    // free the header strip for the full-bleed scene.)
     for (const name of [
-      'TavernHeader',
       'TavernSceneFrame',
       'TavernStatusRow',
       'AmbientPanel',

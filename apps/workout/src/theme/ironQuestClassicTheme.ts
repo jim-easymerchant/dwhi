@@ -141,6 +141,20 @@ export const ironQuestClassicTheme: ThemePack = {
       "Minimum viable dungeon run: show up. That's the whole rule.",
   },
 
+  worldState: {
+    patronSectionLabel: "TONIGHT'S PATRONS",
+    ambientDensity: 'dense',
+    tavernEnergyBias: 0.4,
+    weatherCopy: {
+      rain: 'Rain hammers the tavern roof. The fire mocks it.',
+      wind: 'The shutters rattle. The kettle does not care.',
+      still: 'The night outside is still. Inside is not.',
+      snow: 'Snow piles against the windows. The hearth holds.',
+      fog: 'Fog rolls over the cobblestones. The lanterns push back.',
+      clear: 'A clear night. The road home will be easy.',
+    },
+  },
+
   narration: {
     onQuestStart: () => 'THE TAVERN ROARS.',
     onEnemyDefeat: ({ enemyName, defeatedPhaseCount }) => {

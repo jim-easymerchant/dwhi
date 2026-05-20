@@ -27,6 +27,10 @@ jest.mock('../persistence', () => {
     // Theme repository — added by the theme-packs-and-settings branch.
     loadStoredThemeId: jest.fn().mockResolvedValue(null),
     saveStoredThemeId: jest.fn().mockResolvedValue(true),
+    // Weight-unit + cumulative-XP — added by the product-parity branch.
+    loadStoredWeightUnit: jest.fn().mockResolvedValue(null),
+    saveStoredWeightUnit: jest.fn().mockResolvedValue(true),
+    loadTotalQuestXp: jest.fn().mockResolvedValue(0),
     __testResetDisabled: () => {
       disabledReason = null;
     },

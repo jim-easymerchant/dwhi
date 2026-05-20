@@ -110,6 +110,7 @@ export const WORKOUT_SCHEMA_STATEMENTS = [
   `CREATE TABLE IF NOT EXISTS workout_settings (
     id              TEXT PRIMARY KEY,
     theme_id        TEXT,
+    weight_unit     TEXT,
     updated_at_iso  TEXT
   );`,
 ] as const;

@@ -20,6 +20,9 @@ export type { TavernStatusRowProps } from './TavernStatusRow';
 export { AmbientPanel } from './AmbientPanel';
 export type { AmbientPanelProps } from './AmbientPanel';
 
+export { PatronsPanel } from './PatronsPanel';
+export type { PatronsPanelProps } from './PatronsPanel';
+
 export { QuestCard } from './QuestCard';
 export type { QuestCardProps } from './QuestCard';
 

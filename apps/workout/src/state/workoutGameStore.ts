@@ -72,6 +72,8 @@ export interface PersistenceHandlers {
   }) => void;
   /** Fired when the player selects a theme. Fire-and-forget. */
   onThemeChanged?: (themeId: string) => void;
+  /** Fired when the player toggles their weight-unit preference. */
+  onWeightUnitChanged?: (unit: 'lb' | 'kg') => void;
 }
 
 let handlers: PersistenceHandlers = {};
@@ -223,6 +225,13 @@ export interface WorkoutGameState {
 
   /** Currently selected theme pack id ('momentum' or 'ironquest-classic'). */
   selectedThemeId: string;
+  /** User-facing weight unit ('lb' default; 'kg' alternative). */
+  weightUnit: 'lb' | 'kg';
+  /** Cumulative XP across every persisted completed Quest. Drives
+   *  the displayed LEVEL on the home screen. Decoupled from
+   *  momentum so the LEVEL grows with *history*, not with the
+   *  Ember warming up. */
+  cumulativeXp: number;
 
   // --- modality + variant ---
   modality: Variant;
@@ -256,6 +265,9 @@ export interface WorkoutGameState {
   openSettings: () => void;
   /** Set the active theme pack. Unknown ids fall back silently. */
   setTheme: (themeId: string) => void;
+  /** Set the user's weight-unit preference. Unknown values fall
+   *  back to 'lb' via `safeWeightUnit`. */
+  setWeightUnit: (unit: string) => void;
   setReps: (reps: number) => void;
   setWeight: (weightKg: number) => void;
   logCurrentSet: () => void;
@@ -396,6 +408,14 @@ export const useWorkoutGameStore = create<WorkoutGameState>((set, get) => ({
   // 'momentum' via the theme registry's safeThemeId helper.
   selectedThemeId: 'momentum',
 
+  // Weight-unit display preference. Defaults to pounds; hydration
+  // overrides from the persisted preference if any.
+  weightUnit: 'lb',
+
+  // Cumulative XP — seeded by hydration from SUM(quest_history.xp).
+  // Memory-only mode starts at 0 and grows with each finishQuest.
+  cumulativeXp: 0,
+
   modality: 'bodyweight',
   currentVariantId: INITIAL_VARIANT.id,
   currentSetIndexInVariant: 0,
@@ -465,6 +485,24 @@ export const useWorkoutGameStore = create<WorkoutGameState>((set, get) => ({
     set(() => ({ selectedThemeId: safe }));
     // Fire-and-forget persistence.
     handlers.onThemeChanged?.(safe);
+  },
+
+  // -------------------------------------------------------------------
+  setWeightUnit: (unit) => {
+    // Validate via the units helper; unknown values reset to the
+    // default ('lb'). Loaded lazily for the same reason as the
+    // theme registry — keeps the store module's static graph
+    // independent of unrelated TS modules.
+    let safe: 'lb' | 'kg' = 'lb';
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports, global-require
+      const { safeWeightUnit } = require('../units') as typeof import('../units');
+      safe = safeWeightUnit(unit);
+    } catch {
+      // ignore — accept the default
+    }
+    set(() => ({ weightUnit: safe }));
+    handlers.onWeightUnitChanged?.(safe);
   },
 
   setReps: (reps) => set(() => ({ draftReps: Math.max(0, Math.floor(reps)) })),
@@ -654,7 +692,15 @@ export const useWorkoutGameStore = create<WorkoutGameState>((set, get) => ({
       daysSinceLastQuest: days,
       nowIso: STATIC_NOW_ISO,
     });
-    set(() => ({ phase: 'reward', result }));
+    set(() => ({
+      phase: 'reward',
+      result,
+      // Accumulate quest XP so the displayed LEVEL grows with the
+      // player's history. The persistence bridge separately
+      // appends a row to workout_quest_history; hydration on a
+      // fresh launch re-seeds this same value from SUM(xp).
+      cumulativeXp: s.cumulativeXp + Math.max(0, result.questXp.xp),
+    }));
 
     // Fire-and-forget — saves momentum + appends history.
     handlers.onQuestCompleted?.({

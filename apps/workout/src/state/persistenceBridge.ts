@@ -29,16 +29,20 @@ import {
   loadAllSetMemory,
   loadPlayerMomentum,
   loadStoredThemeId,
+  loadStoredWeightUnit,
+  loadTotalQuestXp,
   recordIfPersonalRecord,
   savePlayerMomentum,
   saveSetMemory,
   saveStoredThemeId,
+  saveStoredWeightUnit,
   type PRKind,
   type PRLookupKey,
   type PersistedSetMemoryEntry,
   type QuestHistoryRecord,
 } from '../persistence';
 import { safeThemeId } from '../theme/themeRegistry';
+import { safeWeightUnit } from '../units';
 
 import {
   type DefeatedEnemyEntry,
@@ -97,7 +101,14 @@ export async function hydratePersistence(): Promise<HydrationResult> {
 
   try {
     await initDatabase();
-    const [memoryMap, momentum, lastSessionAtIso, storedThemeId] = await Promise.all([
+    const [
+      memoryMap,
+      momentum,
+      lastSessionAtIso,
+      storedThemeId,
+      storedWeightUnit,
+      totalQuestXp,
+    ] = await Promise.all([
       loadAllSetMemory().catch((e) => {
         // eslint-disable-next-line no-console
         console.warn('[workout.persistence] loadAllSetMemory failed:', e);
@@ -118,6 +129,16 @@ export async function hydratePersistence(): Promise<HydrationResult> {
         console.warn('[workout.persistence] loadStoredThemeId failed:', e);
         return null;
       }),
+      loadStoredWeightUnit().catch((e) => {
+        // eslint-disable-next-line no-console
+        console.warn('[workout.persistence] loadStoredWeightUnit failed:', e);
+        return null;
+      }),
+      loadTotalQuestXp().catch((e) => {
+        // eslint-disable-next-line no-console
+        console.warn('[workout.persistence] loadTotalQuestXp failed:', e);
+        return 0;
+      }),
     ]);
 
     const setMemory: SetMemory = {};
@@ -136,6 +157,8 @@ export async function hydratePersistence(): Promise<HydrationResult> {
       priorMomentum: momentum?.value ?? DEFAULT_PRIOR_MOMENTUM,
       lastSessionAtIso: lastSessionAtIso ?? momentum?.lastSessionAtIso ?? null,
       selectedThemeId: safeThemeId(storedThemeId),
+      weightUnit: safeWeightUnit(storedWeightUnit),
+      cumulativeXp: Math.max(0, totalQuestXp ?? 0),
       persistenceReady: true,
       persistenceDisabled: false,
       persistenceError: null,
@@ -357,6 +380,22 @@ export async function persistThemeSelection(themeId: string): Promise<void> {
   } catch (e) {
     // eslint-disable-next-line no-console
     console.warn('[workout.persistence] persistThemeSelection failed:', e);
+  }
+}
+
+/**
+ * Save the user's weight-unit preference. Fire-and-forget; resolves
+ * regardless of outcome. Short-circuits when persistence is
+ * disabled (memory-only mode keeps the chosen unit for the running
+ * session via the store, but cannot survive a restart).
+ */
+export async function persistWeightUnit(unit: string): Promise<void> {
+  if (isPersistenceDisabled()) return;
+  try {
+    await saveStoredWeightUnit(unit);
+  } catch (e) {
+    // eslint-disable-next-line no-console
+    console.warn('[workout.persistence] persistWeightUnit failed:', e);
   }
 }
 

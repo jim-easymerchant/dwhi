@@ -25,6 +25,11 @@ jest.mock('../persistence', () => {
   // branch. Defaults: no stored theme, save is a no-op success.
   const loadStoredThemeId = jest.fn().mockResolvedValue(null);
   const saveStoredThemeId = jest.fn().mockResolvedValue(true);
+  // Weight-unit + cumulative-XP — added by the product-parity
+  // branch (021). Defaults: no stored unit, totals empty.
+  const loadStoredWeightUnit = jest.fn().mockResolvedValue(null);
+  const saveStoredWeightUnit = jest.fn().mockResolvedValue(true);
+  const loadTotalQuestXp = jest.fn().mockResolvedValue(0);
   return {
     saveSetMemory,
     loadAllSetMemory,
@@ -40,6 +45,9 @@ jest.mock('../persistence', () => {
     disablePersistence,
     loadStoredThemeId,
     saveStoredThemeId,
+    loadStoredWeightUnit,
+    saveStoredWeightUnit,
+    loadTotalQuestXp,
   };
 });
 

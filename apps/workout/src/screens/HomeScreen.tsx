@@ -21,9 +21,9 @@ import { resolveMomentumTier } from '@dwhi/workout-domain';
 import {
   AmbientPanel,
   EchoLogPanel,
+  PatronsPanel,
   QuestSelectionPanel,
   TavernFooterActions,
-  TavernHeader,
   TavernSceneFrame,
   TavernStatusRow,
 } from '../components/tavern';
@@ -41,6 +41,7 @@ import {
   getAmbientSceneFlavor,
   getTheme,
 } from '../theme';
+import { generateNightlyWorld } from '../world';
 import {
   workoutColors,
   workoutRadii,
@@ -59,6 +60,8 @@ export function HomeScreen(): JSX.Element {
   const persistenceDisabled = useWorkoutGameStore((s) => s.persistenceDisabled);
   const selectedThemeId = useWorkoutGameStore((s) => s.selectedThemeId);
   const openSettings = useWorkoutGameStore((s) => s.openSettings);
+  const weightUnit = useWorkoutGameStore((s) => s.weightUnit);
+  const cumulativeXp = useWorkoutGameStore((s) => s.cumulativeXp);
 
   // Dev-only diagnostic: surface persistence failures as a small
   // muted banner. Production builds never see this — __DEV__ is
@@ -70,6 +73,24 @@ export function HomeScreen(): JSX.Element {
   const ambientLines = getAmbientLines(selectedThemeId, tier);
   const sceneFlavor = getAmbientSceneFlavor(selectedThemeId, tier);
   const daysSince = computeDaysSinceLastQuest(lastSessionAtIso);
+
+  // Generate the nightly world once per render. The generator is
+  // deterministic — same input gives the same output — so memoising
+  // is fine; the only reason to recompute is when the player's
+  // theme / tier / days-since changes.
+  const world = React.useMemo(
+    () =>
+      generateNightlyWorld({
+        themeId: selectedThemeId,
+        tier,
+        daysSinceLastQuest: daysSince,
+      }),
+    [selectedThemeId, tier, daysSince],
+  );
+
+  // The scene-frame flavour line gets the world's weather (varies
+  // daily) glued to the static theme/tier flavor.
+  const sceneFlavorLine = `${sceneFlavor} ${world.weatherLine}`.trim();
 
   // Exercise previews — read from the static encounter fixtures.
   // The home screen never starts a Quest with these names; it only
@@ -87,25 +108,31 @@ export function HomeScreen(): JSX.Element {
   return (
     <SafeAreaView style={styles.safe}>
       <ScrollView contentContainerStyle={styles.scroll}>
-        <TavernHeader
-          testID="home-header"
-          title={theme.headerCopy.title}
-          subtitle={theme.headerCopy.subtitle}
-          onOpenSettings={openSettings}
-        />
-
         <TavernSceneFrame
           testID="home-scene-frame"
           tier={tier}
           overlayColor={theme.paletteOverrides?.hearth}
-          flavorLine={sceneFlavor}
+          flavorLine={sceneFlavorLine}
+          signText={
+            theme.id === 'ironquest-classic'
+              ? theme.headerCopy.title
+              : undefined
+          }
+          signSubtitle={
+            theme.id === 'ironquest-classic'
+              ? theme.headerCopy.subtitle
+              : undefined
+          }
+          signColor={theme.uiAccent.primary}
+          onOpenSettings={openSettings}
         />
 
         <TavernStatusRow
           testID="home-status-row"
-          momentum={priorMomentum}
+          cumulativeXp={cumulativeXp}
           daysSinceLastQuest={daysSince}
           bodyweightKg={bodyweightKg}
+          weightUnit={weightUnit}
           accentColor={theme.uiAccent.primary}
         />
 
@@ -126,6 +153,12 @@ export function HomeScreen(): JSX.Element {
           </View>
         )}
 
+        <PatronsPanel
+          testID="home-patrons-panel"
+          sectionLabel={world.patronSectionLabel}
+          patrons={world.patrons}
+        />
+
         <AmbientPanel
           testID="home-ambient-panel"
           sectionLabel={theme.ambient.sectionLabel}
@@ -145,6 +178,12 @@ export function HomeScreen(): JSX.Element {
           onSelectBodyweight={() => startQuest('bodyweight')}
           onSelectWeighted={() => startQuest('weighted')}
         />
+
+        {world.activityHint.length > 0 ? (
+          <Text testID="home-activity-hint" style={styles.activityHint}>
+            {world.activityHint}
+          </Text>
+        ) : null}
 
         <View style={styles.panels}>
           <EchoLogPanel
@@ -187,6 +226,12 @@ const styles = StyleSheet.create({
   },
   panels: {
     gap: workoutSpacing.sm,
+  },
+  activityHint: {
+    ...workoutType.caption,
+    color: workoutColors.textSecondary,
+    textAlign: 'center',
+    fontStyle: 'italic',
   },
   // Dev-only persistence-disabled diagnostic. Muted so it never
   // becomes shame-coded; functional, not alarmist.
