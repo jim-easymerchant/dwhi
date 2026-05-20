@@ -16,12 +16,37 @@ export function HomeScreen(): JSX.Element {
   const startQuest = useWorkoutGameStore((s) => s.startQuest);
   const modality = useWorkoutGameStore((s) => s.modality);
   const priorMomentum = useWorkoutGameStore((s) => s.priorMomentum);
+  const persistenceError = useWorkoutGameStore((s) => s.persistenceError);
+  const persistenceDisabled = useWorkoutGameStore((s) => s.persistenceDisabled);
+
+  // Dev-only diagnostic: in development builds, surface the
+  // persistence failure as a small muted banner so we don't lose
+  // the signal to console.warn alone. Production builds never see
+  // this — `__DEV__` is false in release.
+  const showDiag = __DEV__ && persistenceDisabled && persistenceError !== null;
 
   return (
     <SafeAreaView style={styles.safe}>
       <ScrollView contentContainerStyle={styles.scroll}>
         <Text style={styles.title}>The Hollow</Text>
         <Text style={styles.subtitle}>Steady. The Ember glows.</Text>
+
+        {showDiag && (
+          <View
+            accessibilityRole="text"
+            accessibilityLabel={`Persistence disabled: ${persistenceError}`}
+            style={styles.diag}
+          >
+            <Text style={styles.diagLabel}>PERSISTENCE DISABLED</Text>
+            <Text style={styles.diagMessage} numberOfLines={3}>
+              {persistenceError}
+            </Text>
+            <Text style={styles.diagHint}>
+              Memory-only mode. Set memory + momentum will not survive a
+              restart.
+            </Text>
+          </View>
+        )}
 
         <View style={styles.emberRow}>
           <View style={styles.emberBarTrack}>
@@ -116,4 +141,28 @@ const styles = StyleSheet.create({
   variantText: { ...workoutType.body, color: workoutColors.textPrimary },
   vow: { ...workoutType.caption, textAlign: 'center', marginTop: workoutSpacing.lg },
   pressed: { opacity: 0.7 },
+  // Dev-only persistence-disabled diagnostic. Muted so it never
+  // becomes shame-coded; functional, not alarmist.
+  diag: {
+    backgroundColor: workoutColors.surfaceElevated,
+    borderRadius: workoutRadii.md,
+    padding: workoutSpacing.md,
+    borderWidth: 1,
+    borderColor: workoutColors.border,
+    gap: workoutSpacing.xs,
+  },
+  diagLabel: {
+    ...workoutType.caption,
+    color: workoutColors.textMuted,
+    letterSpacing: 2,
+  },
+  diagMessage: {
+    ...workoutType.caption,
+    color: workoutColors.textSecondary,
+  },
+  diagHint: {
+    ...workoutType.caption,
+    color: workoutColors.textMuted,
+    fontStyle: 'italic',
+  },
 });

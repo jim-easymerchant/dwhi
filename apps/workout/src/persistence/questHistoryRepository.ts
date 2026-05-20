@@ -95,7 +95,9 @@ export async function getMostRecentCompletedAtIso(): Promise<string | null> {
   return row?.completed_at_iso ?? null;
 }
 
-/** Read recent history (most-recent first, optional limit). */
+/** Read recent history (most-recent first, optional limit).
+ * Malformed rows are skipped (not fatal) — a single bad write
+ * from a future schema-change race never sinks the journal screen. */
 export async function listRecentQuests(limit = 20): Promise<QuestHistoryRecord[]> {
   const db = await getDb();
   const rows = await db.getAllAsync<Row>(
@@ -107,7 +109,22 @@ export async function listRecentQuests(limit = 20): Promise<QuestHistoryRecord[]
        LIMIT ?;`,
     [Math.max(1, Math.floor(limit))],
   );
-  return rows.map(rowToRecord);
+  const out: QuestHistoryRecord[] = [];
+  for (const row of rows) {
+    try {
+      // Minimal required-field guards before we trust the row.
+      if (!row || typeof row.id !== 'string' || typeof row.completed_at_iso !== 'string') {
+        // eslint-disable-next-line no-console
+        console.warn('[workout.persistence] skipping malformed quest history row');
+        continue;
+      }
+      out.push(rowToRecord(row));
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.warn('[workout.persistence] quest history row mapping failed:', e);
+    }
+  }
+  return out;
 }
 
 /** Test-only: wipe the table. */

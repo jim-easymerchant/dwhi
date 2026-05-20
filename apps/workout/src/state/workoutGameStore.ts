@@ -208,6 +208,13 @@ export interface WorkoutGameState {
   /** Set true once hydratePersistence() has populated the store (or
    * failed gracefully). UI may use this to defer history panels. */
   persistenceReady: boolean;
+  /** When true, persistence is latched off for the rest of the
+   * session — the app continues in memory-only mode. Writes are
+   * no-ops; reads return whatever the running session has accrued. */
+  persistenceDisabled: boolean;
+  /** Human-readable explanation of why persistence is disabled,
+   * surfaced as a small dev-only diagnostic on the Home screen. */
+  persistenceError: string | null;
   /** ISO timestamp of the most recently completed Quest. Drives the
    * `daysSinceLastQuest` value passed to runQuest. */
   lastSessionAtIso: string | null;
@@ -371,6 +378,8 @@ export const useWorkoutGameStore = create<WorkoutGameState>((set, get) => ({
   priorMomentum: DEFAULT_PRIOR_MOMENTUM,
 
   persistenceReady: false,
+  persistenceDisabled: false,
+  persistenceError: null,
   lastSessionAtIso: null,
 
   modality: 'bodyweight',
