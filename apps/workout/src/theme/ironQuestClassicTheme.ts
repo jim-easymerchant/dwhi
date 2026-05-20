@@ -74,6 +74,73 @@ export const ironQuestClassicTheme: ThemePack = {
     tagline: 'THE TAVERN WAITS.',
   },
 
+  headerCopy: {
+    title: 'THE WOUNDED GOBLIN',
+    subtitle: 'Tavern & Questionable Lodging',
+  },
+
+  ambient: {
+    sectionLabel: "TONIGHT'S PATRONS",
+    lines: (tier) => {
+      switch (tier) {
+        case 'rusted':
+          return [
+            { heading: 'The Bartender', mood: 'Name Unknown' },
+            { heading: 'A Tired Bard', mood: 'Out of Stories' },
+            { heading: 'A Dog That Should Not Be Here', mood: 'Wagging Anyway' },
+          ];
+        case 'steady':
+          return [
+            { heading: 'The Bartender', mood: 'Cleaning a Mug, Watching' },
+            { heading: 'The Dungeon Announcer', mood: 'Off Duty' },
+            { heading: 'A Tired Bard', mood: 'Picking a Slow Tune' },
+            { heading: 'A Dog That Should Not Be Here', mood: 'Asleep by the Fire' },
+          ];
+        case 'ascendant':
+          return [
+            { heading: 'The Bartender', mood: 'Pours Without Asking' },
+            { heading: 'The Dungeon Announcer', mood: 'Loudly Off Duty' },
+            { heading: 'A Tired Bard', mood: 'Has Found Their Voice' },
+            { heading: 'A Veteran Adventurer', mood: 'Watching the Door' },
+            { heading: 'A Dog That Should Not Be Here', mood: 'King of the Hearth' },
+          ];
+        default:
+          return [
+            { heading: 'The Bartender', mood: 'Name Unknown' },
+            { heading: 'A Dog That Should Not Be Here', mood: 'Wagging Anyway' },
+          ];
+      }
+    },
+    sceneFlavor: (tier) =>
+      tier === 'rusted'
+        ? 'The tavern is quiet. The fire is small. Someone is missing.'
+        : tier === 'steady'
+          ? 'The fire crackles. Mugs clink. The dog is asleep.'
+          : 'The tavern is full. The fire roars. The Goblin grins.',
+  },
+
+  questCard: {
+    sectionLabel: 'CHOOSE YOUR FATE',
+    threatLine: (enemyName) => {
+      const short = enemyName.split(',')[0].toUpperCase();
+      return `${short} IS IN THE ROOM.`;
+    },
+    bodyweightLabel: 'SESSION A · BODYWEIGHT',
+    weightedLabel: 'SESSION B · WEIGHTED',
+  },
+
+  panelLabels: {
+    echoLog: 'KILL LOG',
+    weightLog: 'WEIGHT LOG',
+    sessionHistory: 'SESSION HISTORY',
+    emptyHint: 'NOTHING YET. THE NIGHT IS YOUNG.',
+  },
+
+  footer: {
+    reassurance:
+      "Minimum viable dungeon run: show up. That's the whole rule.",
+  },
+
   narration: {
     onQuestStart: () => 'THE TAVERN ROARS.',
     onEnemyDefeat: ({ enemyName, defeatedPhaseCount }) => {

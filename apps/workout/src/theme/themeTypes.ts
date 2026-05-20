@@ -124,6 +124,79 @@ export interface ThemeMotivational {
 }
 
 // ---------------------------------------------------------------------------
+// Tavern / Home-screen flavour surface
+// ---------------------------------------------------------------------------
+
+/**
+ * Text shown in the Tavern header strip (top-left of the home
+ * screen). The same component renders both themes; only the
+ * strings change.
+ */
+export interface ThemeHeaderCopy {
+  /** Location name, e.g. "THE HOLLOW" / "THE WOUNDED GOBLIN". */
+  title: string;
+  /** Short subtitle under the title. */
+  subtitle: string;
+}
+
+/** One row in the AmbientPanel ("Tonight's Patrons" / "Tonight in the Hollow"). */
+export interface AmbientLine {
+  /** Bold heading, e.g. "The Bartender" / "A quiet ember". */
+  heading: string;
+  /** Muted mood line under the heading. */
+  mood: string;
+}
+
+/**
+ * Theme-driven ambient flavour. The label is the section header
+ * ("Tonight's Patrons" vs "Tonight in the Hollow"); the lines
+ * function returns 2-4 short atmospheric blurbs. Pure
+ * presentational — never affects mechanics.
+ *
+ * The function is passed the current Momentum tier so a theme can
+ * vary its flavour as the Ember warms (e.g., Iron Quest Classic
+ * Tavern fills up at higher tiers).
+ */
+export interface ThemeAmbient {
+  /** Section label. */
+  sectionLabel: string;
+  /** Generator — return 2-4 ambient lines for the current tier. */
+  lines(tier: MomentumTier): readonly AmbientLine[];
+  /** One-line scene flavour shown inside the Tavern scene frame. */
+  sceneFlavor(tier: MomentumTier): string;
+}
+
+/** Per-quest-card threat / flavour copy. */
+export interface ThemeQuestCard {
+  /** Section header above the cards. */
+  sectionLabel: string;
+  /**
+   * One-line threat / framing for the named enemy. Drives the
+   * "X is in the room" copy on each quest card.
+   */
+  threatLine(enemyName: string): string;
+  /** Label for the bodyweight quest button. */
+  bodyweightLabel: string;
+  /** Label for the weighted quest button. */
+  weightedLabel: string;
+}
+
+/** Labels for the lower expandable panels. */
+export interface ThemePanelLabels {
+  echoLog: string;
+  weightLog: string;
+  sessionHistory: string;
+  /** Empty-state line used when no data has accrued yet. */
+  emptyHint: string;
+}
+
+/** Footer line shown at the very bottom of Home. */
+export interface ThemeFooter {
+  /** Short reassurance/punchline line. */
+  reassurance: string;
+}
+
+// ---------------------------------------------------------------------------
 // Narration hooks
 // ---------------------------------------------------------------------------
 
@@ -195,4 +268,14 @@ export interface ThemePack {
   enemyFlavor: ThemeEnemyFlavor;
   /** Motivational style + tagline. */
   motivational: ThemeMotivational;
+  /** Home-screen header copy (location title + subtitle). */
+  headerCopy: ThemeHeaderCopy;
+  /** Ambient flavour panel (section label + per-tier lines). */
+  ambient: ThemeAmbient;
+  /** Quest-selection card copy (section header, threat line, labels). */
+  questCard: ThemeQuestCard;
+  /** Labels for the lower expandable panels. */
+  panelLabels: ThemePanelLabels;
+  /** Footer reassurance line. */
+  footer: ThemeFooter;
 }

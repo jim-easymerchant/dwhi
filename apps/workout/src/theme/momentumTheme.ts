@@ -54,6 +54,70 @@ export const momentumTheme: ThemePack = {
     tagline: 'Steady. The Ember glows.',
   },
 
+  headerCopy: {
+    title: 'The Hollow',
+    subtitle: 'A quiet camp at the edge of the Stillness',
+  },
+
+  ambient: {
+    sectionLabel: 'Tonight in the Hollow',
+    lines: (tier) => {
+      switch (tier) {
+        case 'rusted':
+          return [
+            { heading: 'The ember', mood: 'thin, but it answers' },
+            { heading: 'The hearth', mood: 'cool stone, patient' },
+            { heading: 'The Vow', mood: 'still here, where you left it' },
+          ];
+        case 'steady':
+          return [
+            { heading: 'The ember', mood: 'a steady amber' },
+            { heading: 'The hearth', mood: 'warming the near wall' },
+            { heading: 'The road outside', mood: 'quieter than yesterday' },
+          ];
+        case 'ascendant':
+          return [
+            { heading: 'The ember', mood: 'bright, unhurried' },
+            { heading: 'The hearth', mood: 'casting long warm shadows' },
+            { heading: 'The Hollow', mood: 'smaller than it once was' },
+            { heading: 'The Vow', mood: 'kept' },
+          ];
+        default:
+          return [
+            { heading: 'The ember', mood: 'present' },
+            { heading: 'The hearth', mood: 'waiting' },
+          ];
+      }
+    },
+    sceneFlavor: (tier) =>
+      tier === 'rusted'
+        ? 'Cool stone, low light. The room listens.'
+        : tier === 'steady'
+          ? 'Warm light spills from the hearth.'
+          : 'The Hollow breathes in. The room is full of slow gold.',
+  },
+
+  questCard: {
+    sectionLabel: 'Tonight’s work',
+    threatLine: (enemyName) => {
+      const short = enemyName.split(',')[0];
+      return `${short} is settled in the room.`;
+    },
+    bodyweightLabel: 'Begin · Bodyweight',
+    weightedLabel: 'Begin · Weighted',
+  },
+
+  panelLabels: {
+    echoLog: 'Echoes',
+    weightLog: 'Recent work',
+    sessionHistory: 'Quests remembered',
+    emptyHint: 'Nothing yet. Tomorrow takes care of itself.',
+  },
+
+  footer: {
+    reassurance: 'Showing up is the rule. The rest is detail.',
+  },
+
   narration: {
     onQuestStart: () => 'The Vow holds.',
     onEnemyDefeat: ({ enemyName, defeatedPhaseCount }) => {
