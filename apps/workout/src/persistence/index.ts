@@ -15,6 +15,7 @@
 export {
   __clearDisabledForTests,
   __resetInitCacheForTests,
+  __setSqliteModuleForTests,
   addColumnIfMissing,
   columnExists,
   createIndexIfColumnExists,

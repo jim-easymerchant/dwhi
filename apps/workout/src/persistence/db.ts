@@ -7,34 +7,85 @@
  * shape — but opens a SEPARATE database file ("momentum.db") so the
  * two apps do not share storage.
  *
- * Defensive: once any path in this module fails (open, migrate, or
- * a runtime query), `persistenceDisabled` flips to true and every
- * subsequent `getDb()` rejects fast with a clean error instead of
- * hammering the native bridge. The bridge layer + store catch that
- * rejection and route the app into memory-only mode.
+ * STARTUP-CRASH HARDENING
+ * =======================
  *
- * No third-party dependencies. expo-sqlite is already a workspace
- * dep used by the pantry app.
+ * `expo-sqlite` is NOT imported statically anywhere in this file.
+ * The native module is loaded the FIRST time `getDb()` is called,
+ * via `require('expo-sqlite')` wrapped in try/catch + feature
+ * detection. Reasons:
+ *
+ *   1. A static `import * as SQLite from 'expo-sqlite'` at the top
+ *      of this module pulls the native bridge into every consumer
+ *      via Metro's static analysis. Even though the persistence
+ *      bridge is now lazy-required from `_layout.tsx`, the bridge
+ *      module's own top-level `import` of `'../persistence'` would
+ *      transitively still evaluate `expo-sqlite` synchronously at
+ *      load time — which crashed on devices where the native
+ *      bridge / API surface didn't match.
+ *
+ *   2. Newer Expo SDKs ship `openDatabaseAsync`; some prebuild
+ *      configurations expose only the legacy `openDatabase`. We
+ *      feature-detect the API surface and call
+ *      `disablePersistence(reason)` cleanly when anything we need
+ *      is missing.
+ *
+ *   3. If `require('expo-sqlite')` itself throws (native module
+ *      unavailable, Hermes vs JSC mismatch, …), we catch and
+ *      degrade gracefully — never crash.
+ *
+ * Once any path fails, `persistenceDisabled` flips true and every
+ * subsequent `getDb()` rejects fast with the captured reason. The
+ * bridge layer + store catch that rejection and route the app into
+ * memory-only mode. The dev-only Home-screen banner surfaces the
+ * exact reason for the failure.
  */
-
-import * as SQLite from 'expo-sqlite';
 
 import { WORKOUT_SCHEMA_STATEMENTS } from './schema';
 
 const DB_NAME = 'momentum.db';
 
-let dbPromise: Promise<SQLite.SQLiteDatabase> | null = null;
+// ---------------------------------------------------------------------------
+// Structural types — the small subset of expo-sqlite's API we use.
+// Declared inline (not imported) so this module has zero static
+// `expo-sqlite` dependency.
+// ---------------------------------------------------------------------------
+
+interface SQLiteDatabaseHandle {
+  execAsync(sql: string): Promise<void>;
+  runAsync(
+    sql: string,
+    params?: readonly unknown[],
+  ): Promise<{ lastInsertRowId: number; changes: number }>;
+  getFirstAsync<T = unknown>(
+    sql: string,
+    params?: readonly unknown[],
+  ): Promise<T | null>;
+  getAllAsync<T = unknown>(
+    sql: string,
+    params?: readonly unknown[],
+  ): Promise<T[]>;
+  withTransactionAsync(fn: () => Promise<void>): Promise<void>;
+}
+
+interface SQLiteModuleShape {
+  openDatabaseAsync(name: string): Promise<SQLiteDatabaseHandle>;
+}
+
+// ---------------------------------------------------------------------------
+// Module-level state
+// ---------------------------------------------------------------------------
+
+let dbPromise: Promise<SQLiteDatabaseHandle> | null = null;
 let initPromise: Promise<void> | null = null;
+let persistenceDisabledReason: string | null = null;
+
+// Test-injection seam — see __setSqliteModuleForTests below.
+let injectedSqliteModule: SQLiteModuleShape | null = null;
 
 // ---------------------------------------------------------------------------
 // Disabled-mode latch.
-//
-// Once flipped, every getDb() call short-circuits with the captured
-// reason. The latch is module-level (not per-call) so a failed init
-// does not keep retrying the native bridge for every later write.
 // ---------------------------------------------------------------------------
-
-let persistenceDisabledReason: string | null = null;
 
 export function isPersistenceDisabled(): boolean {
   return persistenceDisabledReason !== null;
@@ -62,32 +113,132 @@ export function __clearDisabledForTests(): void {
   persistenceDisabledReason = null;
 }
 
+/**
+ * Test-only: inject a fake expo-sqlite module so the lazy require
+ * doesn't actually call into the native bridge under Jest. Setting
+ * to `null` restores the real-require path.
+ */
+export function __setSqliteModuleForTests(
+  mod: SQLiteModuleShape | null,
+): void {
+  injectedSqliteModule = mod;
+}
+
+// ---------------------------------------------------------------------------
+// Lazy require + feature detection
+// ---------------------------------------------------------------------------
+
+/**
+ * Lazily load `expo-sqlite` the first time we need it. Returns a
+ * minimal shape so the rest of this module never types against
+ * `expo-sqlite`'s public exports.
+ *
+ * Returns `{ ok: false, reason }` when the module is unavailable
+ * or its API surface doesn't include what we need; the caller
+ * (getDb) translates that into `disablePersistence(reason)` + a
+ * rejected Promise.
+ */
+function loadSqlite(): { ok: true; mod: SQLiteModuleShape } | { ok: false; reason: string } {
+  if (injectedSqliteModule !== null) {
+    return featureDetect(injectedSqliteModule);
+  }
+  let mod: unknown;
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports, global-require
+    mod = require('expo-sqlite');
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return { ok: false, reason: `expo-sqlite require failed: ${msg}` };
+  }
+  if (mod === null || typeof mod !== 'object') {
+    return { ok: false, reason: 'expo-sqlite exported a non-object' };
+  }
+  return featureDetect(mod as SQLiteModuleShape);
+}
+
+function featureDetect(
+  candidate: unknown,
+): { ok: true; mod: SQLiteModuleShape } | { ok: false; reason: string } {
+  if (candidate === null || typeof candidate !== 'object') {
+    return { ok: false, reason: 'expo-sqlite module is not an object' };
+  }
+  const m = candidate as Record<string, unknown>;
+  if (typeof m.openDatabaseAsync !== 'function') {
+    return {
+      ok: false,
+      reason:
+        'expo-sqlite.openDatabaseAsync is not a function in this build — ' +
+        'this SDK / native bridge does not expose the async API we need',
+    };
+  }
+  return { ok: true, mod: m as unknown as SQLiteModuleShape };
+}
+
+function featureDetectDb(
+  candidate: unknown,
+): { ok: true; db: SQLiteDatabaseHandle } | { ok: false; reason: string } {
+  if (candidate === null || typeof candidate !== 'object') {
+    return { ok: false, reason: 'openDatabaseAsync did not return an object' };
+  }
+  const d = candidate as Record<string, unknown>;
+  for (const method of [
+    'execAsync',
+    'runAsync',
+    'getFirstAsync',
+    'getAllAsync',
+    'withTransactionAsync',
+  ] as const) {
+    if (typeof d[method] !== 'function') {
+      return {
+        ok: false,
+        reason: `SQLiteDatabase.${method} is not a function in this build`,
+      };
+    }
+  }
+  return { ok: true, db: d as unknown as SQLiteDatabaseHandle };
+}
+
 // ---------------------------------------------------------------------------
 // Connection
 // ---------------------------------------------------------------------------
 
 /**
- * Shared connection. Opened lazily; cached for the process lifetime.
+ * Shared connection. Opened lazily on first call; cached for the
+ * process lifetime.
  *
- * If the open promise rejects, the cached entry is cleared AND
- * persistence is latched off. Subsequent callers reject quickly
- * with the captured reason instead of triggering another native
- * bridge call.
+ * Every failure mode here flips `persistenceDisabled` so subsequent
+ * calls reject fast with the captured reason — we never hammer the
+ * native bridge after a known-bad open.
  */
-export function getDb(): Promise<SQLite.SQLiteDatabase> {
+export function getDb(): Promise<SQLiteDatabaseHandle> {
   if (persistenceDisabledReason !== null) {
     return Promise.reject(
       new Error(`persistence disabled: ${persistenceDisabledReason}`),
     );
   }
   if (!dbPromise) {
+    const loaded = loadSqlite();
+    if (!loaded.ok) {
+      disablePersistence(loaded.reason);
+      return Promise.reject(new Error(loaded.reason));
+    }
     try {
-      dbPromise = SQLite.openDatabaseAsync(DB_NAME).catch((err) => {
-        dbPromise = null;
-        const msg = err instanceof Error ? err.message : String(err);
-        disablePersistence(`openDatabaseAsync failed: ${msg}`);
-        throw err;
-      });
+      dbPromise = loaded.mod
+        .openDatabaseAsync(DB_NAME)
+        .then((rawDb): SQLiteDatabaseHandle => {
+          const detected = featureDetectDb(rawDb);
+          if (!detected.ok) {
+            disablePersistence(detected.reason);
+            throw new Error(detected.reason);
+          }
+          return detected.db;
+        })
+        .catch((err) => {
+          dbPromise = null;
+          const msg = err instanceof Error ? err.message : String(err);
+          disablePersistence(`openDatabaseAsync failed: ${msg}`);
+          throw err;
+        });
     } catch (e) {
       // Defensive — openDatabaseAsync should always return a
       // Promise, but if the JS shim throws synchronously (e.g., on
@@ -159,8 +310,6 @@ export async function createIndexIfColumnExists(
 
 async function runInit(): Promise<void> {
   const db = await getDb();
-  // PRAGMA must run outside any transaction. expo-sqlite's
-  // execAsync handles this fine.
   await db.execAsync('PRAGMA foreign_keys = ON;');
 
   await db.withTransactionAsync(async () => {
@@ -169,10 +318,6 @@ async function runInit(): Promise<void> {
     }
   });
 
-  // Additive indexes — kept outside Phase 1 so a partial old install
-  // can't bring the whole CREATE TABLE block down with it. Each
-  // helper guards against a missing column so a stale DB from an
-  // earlier shape never breaks startup.
   await createIndexIfColumnExists(
     'idx_workout_set_memory_exercise',
     'workout_set_memory',
@@ -207,8 +352,6 @@ export function initDatabase(): Promise<void> {
     initPromise = runInit().catch((err) => {
       const msg = err instanceof Error ? err.message : String(err);
       disablePersistence(`initDatabase failed: ${msg}`);
-      // Keep the cached rejection so concurrent awaiters get the
-      // same answer.
       throw err;
     });
   }
@@ -236,4 +379,5 @@ export function __resetInitCacheForTests(): void {
   initPromise = null;
   dbPromise = null;
   persistenceDisabledReason = null;
+  injectedSqliteModule = null;
 }
