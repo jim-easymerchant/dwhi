@@ -39,7 +39,12 @@ import { Animated, StyleSheet, View } from 'react-native';
 
 import type { EnemyCategory, EnemyMood } from '@dwhi/workout-domain';
 
-import { mapForCategory, type SpriteMap } from './spriteMaps';
+import {
+  mapForCategory,
+  spriteById,
+  type SpriteId,
+  type SpriteMap,
+} from './spriteMaps';
 import { paletteFor, tintHearth } from './spritePalettes';
 
 // ---------------------------------------------------------------------------
@@ -66,7 +71,14 @@ export interface MonsterSpriteProps {
   victoryAvailable?: boolean;
   /** When true, suppress the breathing animation entirely. */
   paused?: boolean;
-  /** Optional sprite override (e.g. for tier-up emberMap surprise). */
+  /**
+   * Optional explicit sprite-registry id. When set, takes
+   * precedence over `category` for picking the silhouette — used
+   * by the future fragment generator to surface Iron-Quest-derived
+   * variants without changing the enemy's category contract.
+   */
+  spriteId?: SpriteId;
+  /** Optional raw sprite override (highest precedence; for tests + tier-up cameos). */
   spriteMap?: SpriteMap;
   /** Optional test ID for the outer Animated.View. */
   testID?: string;
@@ -78,11 +90,14 @@ export function MonsterSprite({
   pixelSize = DEFAULT_PIXEL_SIZE,
   victoryAvailable = false,
   paused = false,
+  spriteId,
   spriteMap,
   testID,
 }: MonsterSpriteProps): JSX.Element {
   const palette = paletteFor(mood);
-  const map = spriteMap ?? mapForCategory(category);
+  const map: SpriteMap =
+    spriteMap ??
+    (spriteId !== undefined ? spriteById(spriteId) : mapForCategory(category));
 
   // Breathing — one Animated.Value per mount, looped with the
   // native driver so the JS thread stays idle. Stops cleanly on
