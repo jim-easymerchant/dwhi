@@ -60,7 +60,7 @@ import {
 // culprit. Leave FALSE for production.
 // ---------------------------------------------------------------------------
 
-const DISABLE_PERSISTENCE_BOOT = false;
+const DISABLE_PERSISTENCE_BOOT = true;
 
 // ---------------------------------------------------------------------------
 // bootPersistence — fully async, fully defensive.
