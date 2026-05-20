@@ -315,14 +315,16 @@ describe('HomeScreen content boundary', () => {
     // We expect tavern barrel imports.
     expect(text).toMatch(/from\s+['"][^'"]*components\/tavern['"]/);
     // The tavern component names that the HomeScreen composes
-    // should each appear at least once. (`TavernHeader` is no
-    // longer composed here — the product-parity branch absorbed
-    // the gear button + theme sign into `TavernSceneFrame` to
-    // free the header strip for the full-bleed scene.)
+    // should each appear at least once. NOTE on history:
+    //   - `TavernHeader` was absorbed into `TavernSceneFrame`
+    //     by the product-parity branch (021).
+    //   - `AmbientPanel` was removed by the device-QA branch
+    //     (024) when the duplicate patrons heading collapsed
+    //     into a single `PatronsPanel`.
     for (const name of [
       'TavernSceneFrame',
       'TavernStatusRow',
-      'AmbientPanel',
+      'PatronsPanel',
       'QuestSelectionPanel',
       'EchoLogPanel',
       'TavernFooterActions',

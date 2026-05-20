@@ -13,13 +13,12 @@
  */
 
 import React from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { resolveMomentumTier } from '@dwhi/workout-domain';
 
 import {
-  AmbientPanel,
   EchoLogPanel,
   PatronsPanel,
   QuestSelectionPanel,
@@ -36,12 +35,9 @@ import {
   computeDaysSinceLastQuest,
   useWorkoutGameStore,
 } from '../state/workoutGameStore';
-import {
-  getAmbientLines,
-  getAmbientSceneFlavor,
-  getTheme,
-} from '../theme';
+import { getAmbientSceneFlavor, getTheme } from '../theme';
 import { generateNightlyWorld } from '../world';
+import { findTemplate, listAllTemplates } from '../workouts';
 import {
   workoutColors,
   workoutRadii,
@@ -60,6 +56,8 @@ export function HomeScreen(): JSX.Element {
   const persistenceDisabled = useWorkoutGameStore((s) => s.persistenceDisabled);
   const selectedThemeId = useWorkoutGameStore((s) => s.selectedThemeId);
   const openSettings = useWorkoutGameStore((s) => s.openSettings);
+  const openWorkouts = useWorkoutGameStore((s) => s.openWorkouts);
+  const selectedTemplateId = useWorkoutGameStore((s) => s.selectedTemplateId);
   const weightUnit = useWorkoutGameStore((s) => s.weightUnit);
   const cumulativeXp = useWorkoutGameStore((s) => s.cumulativeXp);
 
@@ -70,7 +68,6 @@ export function HomeScreen(): JSX.Element {
 
   const tier = resolveMomentumTier(priorMomentum);
   const theme = getTheme(selectedThemeId);
-  const ambientLines = getAmbientLines(selectedThemeId, tier);
   const sceneFlavor = getAmbientSceneFlavor(selectedThemeId, tier);
   const daysSince = computeDaysSinceLastQuest(lastSessionAtIso);
 
@@ -104,6 +101,13 @@ export function HomeScreen(): JSX.Element {
     () => PUSH_WEIGHTED_VARIANTS.map((v) => v.name),
     [],
   );
+
+  // The selected workout template — currently only used for
+  // labelling the "active workout" hint. The orchestrator
+  // encounter is still the Push Day fixture in v1; the next
+  // branch will route the template into `runQuest` directly.
+  const selectedTemplate = findTemplate(selectedTemplateId);
+  const totalTemplates = listAllTemplates().length;
 
   return (
     // edges="bottom" so the SafeAreaView does NOT inset the top —
@@ -156,16 +160,14 @@ export function HomeScreen(): JSX.Element {
           </View>
         )}
 
+        {/* Single character / presence block. Device-QA
+            feedback (024) collapsed the previous two-panel
+            layout into one — the heading is theme-driven via
+            `worldState.patronSectionLabel`. */}
         <PatronsPanel
           testID="home-patrons-panel"
           sectionLabel={world.patronSectionLabel}
           patrons={world.patrons}
-        />
-
-        <AmbientPanel
-          testID="home-ambient-panel"
-          sectionLabel={theme.ambient.sectionLabel}
-          lines={ambientLines}
         />
 
         <QuestSelectionPanel
@@ -181,6 +183,38 @@ export function HomeScreen(): JSX.Element {
           onSelectBodyweight={() => startQuest('bodyweight')}
           onSelectWeighted={() => startQuest('weighted')}
         />
+
+        {/* Workouts panel — surfaces the active template + a
+            Manage button. The library screen lets the player
+            pick a different template or import a new one. The
+            orchestrator's encounter mapping is still the Push
+            Day fixture in v1 — documented limitation. */}
+        <View testID="home-workouts-panel" style={styles.workoutsPanel}>
+          <View style={styles.workoutsHeader}>
+            <View style={styles.workoutsHeaderText}>
+              <Text style={styles.workoutsLabel}>ACTIVE WORKOUT</Text>
+              <Text testID="home-workouts-active" style={styles.workoutsName}>
+                {selectedTemplate?.name ?? 'Push Day'}
+              </Text>
+              <Text style={styles.workoutsHint}>
+                {totalTemplates} in your library · tap Manage to add more.
+              </Text>
+            </View>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Manage workouts"
+              testID="home-open-workouts"
+              onPress={openWorkouts}
+              style={({ pressed }) => [
+                styles.workoutsManage,
+                { borderColor: theme.uiAccent.primary },
+                pressed && styles.pressedSoft,
+              ]}
+            >
+              <Text style={styles.workoutsManageText}>Manage</Text>
+            </Pressable>
+          </View>
+        </View>
 
         {world.activityHint.length > 0 ? (
           <Text testID="home-activity-hint" style={styles.activityHint}>
@@ -241,6 +275,37 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     fontStyle: 'italic',
   },
+  workoutsPanel: {
+    backgroundColor: workoutColors.surface,
+    borderRadius: workoutRadii.md,
+    borderWidth: 1,
+    borderColor: workoutColors.border,
+    padding: workoutSpacing.md,
+  },
+  workoutsHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: workoutSpacing.md,
+  },
+  workoutsHeaderText: { flex: 1, gap: 2 },
+  workoutsLabel: {
+    ...workoutType.caption,
+    letterSpacing: 2,
+    color: workoutColors.textMuted,
+  },
+  workoutsName: { ...workoutType.heading, fontSize: 18 },
+  workoutsHint: {
+    ...workoutType.caption,
+    color: workoutColors.textSecondary,
+  },
+  workoutsManage: {
+    paddingHorizontal: workoutSpacing.md,
+    paddingVertical: workoutSpacing.sm,
+    borderRadius: workoutRadii.sm,
+    borderWidth: 1,
+  },
+  workoutsManageText: { ...workoutType.body, color: workoutColors.textPrimary },
+  pressedSoft: { opacity: 0.75 },
   // Dev-only persistence-disabled diagnostic. Muted so it never
   // becomes shame-coded; functional, not alarmist.
   diag: {

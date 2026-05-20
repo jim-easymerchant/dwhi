@@ -62,36 +62,31 @@ function read(file: string): string {
 // ===========================================================================
 
 describe('no duplicate patrons heading', () => {
-  test('each theme has DIFFERENT labels for ambient vs world-state sections', () => {
-    for (const theme of [momentumTheme, ironQuestClassicTheme]) {
-      const ambient = theme.ambient.sectionLabel;
-      const patrons = theme.worldState.patronSectionLabel;
-      expect(ambient).not.toBe(patrons);
-      // And neither is empty.
-      expect(ambient.length).toBeGreaterThan(0);
-      expect(patrons.length).toBeGreaterThan(0);
-    }
+  // Branch 024 device-QA: the duplicate "TONIGHT'S PATRONS"
+  // section was caused by HomeScreen mounting BOTH the
+  // PatronsPanel (coach archetypes) and the AmbientPanel
+  // (environmental blurbs) with confusingly-similar headings.
+  // The fix removed AmbientPanel from HomeScreen and let
+  // PatronsPanel be the single character/presence block. The
+  // theme labels themselves CAN now be identical because only
+  // one panel renders.
+  test('HomeScreen mounts exactly one patron / character panel', () => {
+    const home = read(HOME);
+    // PatronsPanel is mounted.
+    expect(home).toMatch(/<PatronsPanel\b/);
+    // AmbientPanel is NOT mounted (was the second duplicate).
+    expect(home).not.toMatch(/<AmbientPanel\b/);
   });
 
-  test('Iron Quest patrons section is renamed away from "TONIGHT\'S PATRONS"', () => {
-    expect(ironQuestClassicTheme.worldState.patronSectionLabel).not.toMatch(
-      /tonight'?s patrons/i,
-    );
-    // It uses the explicit re-name from the brief.
+  test('IQ keeps "TONIGHT\'S PATRONS" as the patrons heading', () => {
     expect(ironQuestClassicTheme.worldState.patronSectionLabel).toBe(
-      'THE REGULARS',
+      "TONIGHT'S PATRONS",
     );
   });
 
-  test('Momentum patrons section keeps a quiet, distinct label', () => {
+  test('Momentum keeps a quiet, distinct patrons heading', () => {
     expect(momentumTheme.worldState.patronSectionLabel).toBe(
       'Voices around the fire',
-    );
-  });
-
-  test('the IQ ambient label is still "TONIGHT\'S PATRONS" (environmental section)', () => {
-    expect(ironQuestClassicTheme.ambient.sectionLabel).toMatch(
-      /tonight'?s patrons/i,
     );
   });
 });
@@ -103,9 +98,13 @@ describe('no duplicate patrons heading', () => {
 describe('TavernSceneFrame full-bleed', () => {
   const text = read(SCENE_FRAME);
 
-  test('uses Dimensions to bleed across the viewport width', () => {
-    expect(text).toMatch(/Dimensions\.get\(['"]window['"]\)/);
-    expect(text).toMatch(/VIEWPORT_WIDTH/);
+  test('uses useWindowDimensions to bleed across the live viewport width', () => {
+    // Branch 024 switched from the captured-at-load
+    // `Dimensions.get('window').width` to the live
+    // `useWindowDimensions()` hook so the scene responds to
+    // rotation + variable phone widths on real devices.
+    expect(text).toMatch(/useWindowDimensions/);
+    expect(text).toMatch(/from\s+['"]react-native['"]/);
   });
 
   test('cancels parent horizontal padding via negative margin', () => {
@@ -142,11 +141,14 @@ describe('Iron Quest sign positioning', () => {
     const idx = text.indexOf('signWrap: {');
     expect(idx).toBeGreaterThan(-1);
     const block = text.slice(idx, text.indexOf('},', idx));
-    // Anchored: must declare `left:` and `top:`. Must NOT declare
-    // `alignSelf: 'center'` (the previous centred sign).
+    // Anchored: must declare `left:`. `top:` is set DYNAMICALLY
+    // from `insets.top + sm` in branch 024 so it sits below the
+    // safe-area top edge — so we look for that pattern in the
+    // file body, not the style block.
     expect(block).toMatch(/left:\s*workoutSpacing/);
-    expect(block).toMatch(/top:\s*workoutSpacing/);
     expect(block).not.toMatch(/alignSelf:\s*['"]center['"]/);
+    expect(text).toMatch(/useSafeAreaInsets/);
+    expect(text).toMatch(/insets\.top\s*\+\s*workoutSpacing\.sm/);
   });
 
   test('sign max width keeps it from dominating the scene (≤ 200)', () => {
@@ -187,9 +189,14 @@ describe('Battle player HP', () => {
     expect(text).toContain('testID="battle-player-hp-level"');
   });
 
-  test('player HP is computed via the pure combat module', () => {
-    expect(text).toMatch(/from\s+['"]\.\.\/combat['"]/);
-    expect(text).toMatch(/computePlayerHp/);
+  test('player HP is sourced from the store (current/max model)', () => {
+    // Branch 024 moved the HP derivation into the store at
+    // quest-start; the BattleScreen now reads `playerCurrentHp`
+    // and `playerMaxHp` directly. The pure formula still lives
+    // in apps/workout/src/combat — see playerHp.test.ts — but
+    // it's invoked from `startQuest`, not the screen.
+    expect(text).toMatch(/playerCurrentHp/);
+    expect(text).toMatch(/playerMaxHp/);
   });
 
   test('player HP fill is themed ember (uiAccent.primary), distinct from enemy red', () => {
@@ -230,15 +237,28 @@ describe('playerHp module body-mass independence', () => {
 // ===========================================================================
 
 describe('Rest timer integration', () => {
-  const text = read(BATTLE);
+  // Branch 024 device-QA moved the RestTimer off BattleScreen
+  // (where it was unreachable — the early-return to RestScreen
+  // ate it) and onto the RestScreen itself, where it actually
+  // appears AFTER the player logs an attack.
+  const battle = read(BATTLE);
+  const REST = path.resolve(__dirname, '..', 'screens', 'RestScreen.tsx');
+  const rest = fs.readFileSync(REST, 'utf8');
 
-  test('BattleScreen mounts the RestTimer component', () => {
-    expect(text).toMatch(/<RestTimer\b/);
-    expect(text).toMatch(/useRestTimer/);
+  test('BattleScreen no longer mounts RestTimer (it lives on RestScreen)', () => {
+    expect(battle).not.toMatch(/<RestTimer\b/);
   });
 
-  test('offerWhenIdle only fires once the player has logged a set', () => {
-    expect(text).toMatch(/offerWhenIdle=\{log\.length\s*>\s*0/);
+  test('RestScreen mounts the RestTimer and creates the hook', () => {
+    expect(rest).toMatch(/<RestTimer\b/);
+    expect(rest).toMatch(/useRestTimer\(\)/);
+  });
+
+  test('RestScreen offers the timer chips unconditionally (after-attack screen)', () => {
+    // The component prop is `offerWhenIdle`. On RestScreen we
+    // either pass `offerWhenIdle` (no value) or
+    // `offerWhenIdle={true}`. Either form is fine.
+    expect(rest).toMatch(/offerWhenIdle(\s|$|}|=)/);
   });
 });
 

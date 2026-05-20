@@ -184,6 +184,24 @@ emotional texture of the long game. They do not expand MVP scope.
     dedicated player HP bar on the battle screen. Optional
     `useRestTimer` hook + `RestTimer` component — pure reducer
     state machine, never-blocking, supportive copy only.
+24. [`024-device-qa-and-workout-authoring.md`](./024-device-qa-and-workout-authoring.md)
+    — five device-QA fixes + workout-authoring foundation.
+    Fixes: full-bleed via `useWindowDimensions`, sign/gear
+    pushed below the safe-area top inset on Android, single
+    PatronsPanel (AmbientPanel removed from HomeScreen),
+    player HP current/max with deterministic pressure-damage
+    per rest transition (floor of 1, no defeat state), rest
+    timer moved off BattleScreen onto RestScreen where it's
+    actually reachable + 60/90/120 chips verified across the
+    full duration. New `apps/workout/src/workouts/` module
+    (types, 5 built-in templates — Push / Pull / Legs / Full
+    Body / Recovery, plain-text parser with lb/kg/AMRAP/timed/
+    rest support, library with memory-only fallback). New
+    `WorkoutLibraryScreen` reachable from a "Manage workouts"
+    button on home. New `workout_templates` SQLite table for
+    imported templates. Orchestrator encounter still hardwired
+    to Push Day — full template→encounter wire is a
+    documented next-branch follow-up.
 
 ### Branch — Product parity pass
 

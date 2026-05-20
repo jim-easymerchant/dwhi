@@ -104,7 +104,13 @@ export const PLAN_EXPANSION_PER_CONTINUATION = 3;
 // Phase
 // ---------------------------------------------------------------------------
 
-export type GamePhase = 'home' | 'battle' | 'rest' | 'reward' | 'settings';
+export type GamePhase =
+  | 'home'
+  | 'battle'
+  | 'rest'
+  | 'reward'
+  | 'settings'
+  | 'workouts';
 
 // ---------------------------------------------------------------------------
 // Logged set + set memory
@@ -225,6 +231,18 @@ export interface WorkoutGameState {
 
   /** Currently selected theme pack id ('momentum' or 'ironquest-classic'). */
   selectedThemeId: string;
+  /**
+   * Currently selected workout template id — drives which card is
+   * highlighted on the home screen and which template's name shows
+   * up on the BattleScreen header. Defaults to 'push-day' so the
+   * existing encounter remains the canonical first quest.
+   *
+   * NB v1 limitation: the orchestrator's encounter shape is still
+   * the Push Day fixture; the displayed template is used for
+   * labelling. Future branch: drive variants from the selected
+   * template's exercises.
+   */
+  selectedTemplateId: string;
   /** User-facing weight unit ('lb' default; 'kg' alternative). */
   weightUnit: 'lb' | 'kg';
   /** Cumulative XP across every persisted completed Quest. Drives
@@ -253,6 +271,16 @@ export interface WorkoutGameState {
   lastSetDamage: number | null;
   victoryAvailable: boolean;
 
+  // --- player HP (readiness / capacity) ---
+  /** Current player HP. Recomputed at quest start from
+   *  `computePlayerHp({ level, recentSessions, momentum })`;
+   *  decreased by small pressure-damage during the encounter; clamped
+   *  at MIN_PLAYER_HP. Resets to max on returnToCamp(). */
+  playerCurrentHp: number;
+  /** Snapshot of max HP at quest start. Stored so the battle UI
+   *  can render current/max without recomputing per render. */
+  playerMaxHp: number;
+
   // --- multi-phase accounting (Bug 2) ---
   defeatedEnemies: DefeatedEnemyEntry[];
   /** How many times "Continue Sets" was tapped in this Quest. */
@@ -267,6 +295,10 @@ export interface WorkoutGameState {
   startQuest: (modality: Variant) => void;
   /** Open the Settings panel from anywhere. */
   openSettings: () => void;
+  /** Open the Workout library / import panel. */
+  openWorkouts: () => void;
+  /** Select which workout template the home screen should highlight. */
+  setSelectedTemplate: (templateId: string) => void;
   /** Set the active theme pack. Unknown ids fall back silently. */
   setTheme: (themeId: string) => void;
   /** Set the user's weight-unit preference. Unknown values fall
@@ -412,6 +444,9 @@ export const useWorkoutGameStore = create<WorkoutGameState>((set, get) => ({
   // 'momentum' via the theme registry's safeThemeId helper.
   selectedThemeId: 'momentum',
 
+  // Default highlighted template — the original Push Day.
+  selectedTemplateId: 'push-day',
+
   // Weight-unit display preference. Defaults to pounds; hydration
   // overrides from the persisted preference if any.
   weightUnit: 'lb',
@@ -442,15 +477,34 @@ export const useWorkoutGameStore = create<WorkoutGameState>((set, get) => ({
   defeatedEnemies: [],
   continuationCount: 0,
 
+  // Player HP is seeded by startQuest from the pure formula; the
+  // initial value here is the BASE so the home screen has a value
+  // before the player has ever entered combat.
+  playerCurrentHp: 100,
+  playerMaxHp: 100,
+
   log: [],
   setMemory: {},
   result: null,
 
   // -------------------------------------------------------------------
   startQuest: (modality) => {
+    const s = get();
     const list = variantsFor(ENCOUNTER, modality);
     const firstVariant = list[0];
-    const draft = defaultsFor(modality, firstVariant.id, 0, get().setMemory);
+    const draft = defaultsFor(modality, firstVariant.id, 0, s.setMemory);
+    // Seed player HP for this quest from the pure formula. The
+    // value is captured once at quest start; in-quest pressure
+    // shaves it during rest transitions.
+    // eslint-disable-next-line @typescript-eslint/no-require-imports, global-require
+    const { computePlayerHp } = require('../combat') as typeof import('../combat');
+    // eslint-disable-next-line @typescript-eslint/no-require-imports, global-require
+    const { levelForCumulativeXp } = require('../leveling') as typeof import('../leveling');
+    const max = computePlayerHp({
+      level: levelForCumulativeXp(s.cumulativeXp),
+      recentSessions: s.recentSessionsCount,
+      momentum: s.priorMomentum,
+    }).total;
     set(() => ({
       phase: 'battle',
       modality,
@@ -465,6 +519,8 @@ export const useWorkoutGameStore = create<WorkoutGameState>((set, get) => ({
       victoryAvailable: false,
       defeatedEnemies: [],
       continuationCount: 0,
+      playerCurrentHp: max,
+      playerMaxHp: max,
       log: [],
       result: null,
     }));
@@ -473,6 +529,15 @@ export const useWorkoutGameStore = create<WorkoutGameState>((set, get) => ({
   // -------------------------------------------------------------------
   // -------------------------------------------------------------------
   openSettings: () => set(() => ({ phase: 'settings' })),
+
+  // -------------------------------------------------------------------
+  openWorkouts: () => set(() => ({ phase: 'workouts' })),
+
+  // -------------------------------------------------------------------
+  setSelectedTemplate: (templateId) => {
+    if (typeof templateId !== 'string' || templateId.length === 0) return;
+    set(() => ({ selectedTemplateId: templateId }));
+  },
 
   // -------------------------------------------------------------------
   setTheme: (themeId) => {
@@ -631,7 +696,24 @@ export const useWorkoutGameStore = create<WorkoutGameState>((set, get) => ({
   },
 
   // -------------------------------------------------------------------
-  enterRest: () => set(() => ({ phase: 'rest' })),
+  enterRest: () =>
+    set((s) => {
+      // Player HP pressure model: the enemy's turn shaves a
+      // small, deterministic amount from the player's HP. The
+      // damage scales gently with the enemy phase index — phase 0
+      // is the gentlest, continuations are slightly heavier.
+      // Bounded by MIN_PLAYER_HP_FLOOR so the bar never collapses
+      // (no defeat state in this v1; no shame mechanics).
+      const PHASE_DAMAGE_BASE = 6;
+      const PHASE_DAMAGE_STEP = 2;
+      const MIN_PLAYER_HP_FLOOR = 1;
+      const pressure = PHASE_DAMAGE_BASE + s.enemyPhaseIndex * PHASE_DAMAGE_STEP;
+      const nextHp = Math.max(
+        MIN_PLAYER_HP_FLOOR,
+        s.playerCurrentHp - pressure,
+      );
+      return { phase: 'rest', playerCurrentHp: nextHp };
+    }),
 
   endRest: () => set(() => ({ phase: 'battle' })),
 
@@ -754,10 +836,13 @@ export const useWorkoutGameStore = create<WorkoutGameState>((set, get) => ({
       victoryAvailable: false,
       defeatedEnemies: [],
       continuationCount: 0,
+      // Player HP resets to the at-quest-start max — no carry-over
+      // damage. Returning to the camp is a clean slate.
+      playerCurrentHp: s.playerMaxHp,
       log: [],
       result: null,
-      // setMemory, priorMomentum, lastSessionAtIso, and
-      // persistenceReady are intentionally preserved.
+      // setMemory, priorMomentum, lastSessionAtIso, playerMaxHp,
+      // and persistenceReady are intentionally preserved.
     }));
   },
 }));

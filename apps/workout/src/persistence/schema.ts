@@ -113,4 +113,23 @@ export const WORKOUT_SCHEMA_STATEMENTS = [
     weight_unit     TEXT,
     updated_at_iso  TEXT
   );`,
+
+  // -----------------------------------------------------------------------
+  // workout_templates
+  //
+  // User-imported workout templates. One row per template; the
+  // `payload_json` blob carries the full WorkoutTemplate shape so
+  // adding fields later does not require a migration (just version
+  // the parser).
+  //
+  // Built-in templates live in code (src/workouts/builtins.ts) —
+  // they are NEVER stored in this table.
+  // -----------------------------------------------------------------------
+  `CREATE TABLE IF NOT EXISTS workout_templates (
+    id              TEXT PRIMARY KEY,
+    name            TEXT NOT NULL,
+    payload_json    TEXT NOT NULL,
+    created_at_iso  TEXT NOT NULL,
+    updated_at_iso  TEXT NOT NULL
+  );`,
 ] as const;

@@ -39,10 +39,7 @@ import {
   formatWeight,
   stepSizeKg,
 } from '../units';
-import { computePlayerHp } from '../combat';
 import { levelForCumulativeXp } from '../leveling';
-import { RestTimer } from '../components/battle/RestTimer';
-import { useRestTimer } from '../hooks/useRestTimer';
 
 export function BattleScreen(): JSX.Element {
   const phase = useWorkoutGameStore((s) => s.phase);
@@ -70,21 +67,17 @@ export function BattleScreen(): JSX.Element {
   const enemyPhaseIndex = useWorkoutGameStore((s) => s.enemyPhaseIndex);
   const weightUnit = useWorkoutGameStore((s) => s.weightUnit);
   const cumulativeXp = useWorkoutGameStore((s) => s.cumulativeXp);
-  const recentSessionsCount = useWorkoutGameStore((s) => s.recentSessionsCount);
-  const priorMomentum = useWorkoutGameStore((s) => s.priorMomentum);
-
-  // Player HP — pure derived; readiness / capacity, not body mass.
-  // Pure function from level + recent-sessions + momentum.
+  // Player HP: current is tracked in the store (mutates during
+  // the encounter as pressure damage accrues); max is captured at
+  // quest start. The displayed LEVEL still comes from the
+  // cumulative XP curve.
+  const playerCurrentHp = useWorkoutGameStore((s) => s.playerCurrentHp);
+  const playerMaxHp = useWorkoutGameStore((s) => s.playerMaxHp);
+  const playerHpPct = Math.max(
+    0,
+    Math.min(100, Math.round((playerCurrentHp / Math.max(1, playerMaxHp)) * 100)),
+  );
   const playerLevel = levelForCumulativeXp(cumulativeXp);
-  const playerHp = computePlayerHp({
-    level: playerLevel,
-    recentSessions: recentSessionsCount,
-    momentum: priorMomentum,
-  });
-
-  // Optional, never-blocking rest timer. The hook owns local
-  // state; the parent only decides when to OFFER the chips.
-  const restTimer = useRestTimer();
 
   if (phase === 'rest') {
     return <RestScreen />;
@@ -187,7 +180,7 @@ export function BattleScreen(): JSX.Element {
           testID="battle-player-hp-block"
           style={styles.playerHpBlock}
           accessibilityRole="progressbar"
-          accessibilityLabel={`Player readiness ${playerHp.total} HP`}
+          accessibilityLabel={`Player readiness ${playerCurrentHp} of ${playerMaxHp} HP`}
         >
           <View style={styles.hpHeaderRow}>
             <Text style={styles.hpHeaderLabel}>YOU</Text>
@@ -201,17 +194,19 @@ export function BattleScreen(): JSX.Element {
               style={[
                 styles.hpBarFill,
                 {
-                  // Player bar is always full at the start of a battle —
-                  // no in-session decay (anti-punishment). It scales
-                  // with cumulative readiness instead.
-                  width: '100%',
+                  // Width = currentHp / maxHp. The bar visibly
+                  // shrinks as the enemy's rest-turn pressure
+                  // chips away at the player's readiness; clamped
+                  // by the store at MIN_PLAYER_HP_FLOOR so it
+                  // never collapses (no defeat in v1).
+                  width: `${playerHpPct}%`,
                   backgroundColor: theme.uiAccent.primary,
                 },
               ]}
             />
           </View>
           <Text testID="battle-player-hp-text" style={styles.hpText}>
-            {playerHp.total} HP  ·  ready
+            {playerCurrentHp} / {playerMaxHp}  ·  {playerHpPct}%
           </Text>
         </View>
 
@@ -321,18 +316,10 @@ export function BattleScreen(): JSX.Element {
           </View>
         )}
 
-        {/* Optional rest timer — supportive, never-blocking.
-            Offers 60/90/120-second presets after at least one
-            set has been logged. The hook owns the countdown
-            state; tapping a chip starts it; the player can
-            continue working through the encounter while it
-            ticks, or dismiss it at any time. */}
-        <RestTimer
-          testID="battle-rest-timer"
-          timer={restTimer}
-          offerWhenIdle={log.length > 0 && !victoryAvailable}
-          accentColor={theme.uiAccent.primary}
-        />
+        {/* Optional rest timer — moved to RestScreen in branch
+            024 (device-QA pass). It used to live here but was
+            unreachable because the BattleScreen early-returns
+            <RestScreen /> the moment the player attacks. */}
 
         {/* Variant chooser */}
         <View style={styles.chooserBlock}>

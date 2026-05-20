@@ -142,7 +142,7 @@ export const ironQuestClassicTheme: ThemePack = {
   },
 
   worldState: {
-    patronSectionLabel: 'THE REGULARS',
+    patronSectionLabel: "TONIGHT'S PATRONS",
     ambientDensity: 'dense',
     tavernEnergyBias: 0.4,
     weatherCopy: {

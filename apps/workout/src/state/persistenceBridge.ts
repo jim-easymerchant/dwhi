@@ -27,6 +27,7 @@ import {
   initDatabase,
   isPersistenceDisabled,
   loadAllSetMemory,
+  loadAllWorkoutTemplates,
   loadPlayerMomentum,
   loadSessionCountSince,
   loadStoredThemeId,
@@ -37,6 +38,7 @@ import {
   saveSetMemory,
   saveStoredThemeId,
   saveStoredWeightUnit,
+  saveWorkoutTemplate,
   type PRKind,
   type PRLookupKey,
   type PersistedSetMemoryEntry,
@@ -44,6 +46,10 @@ import {
 } from '../persistence';
 import { safeThemeId } from '../theme/themeRegistry';
 import { safeWeightUnit } from '../units';
+import {
+  setImportedTemplatesForHydration,
+  type WorkoutTemplate,
+} from '../workouts';
 
 import {
   type DefeatedEnemyEntry,
@@ -115,6 +121,7 @@ export async function hydratePersistence(): Promise<HydrationResult> {
       storedWeightUnit,
       totalQuestXp,
       recentSessionsCount,
+      persistedTemplates,
     ] = await Promise.all([
       loadAllSetMemory().catch((e) => {
         // eslint-disable-next-line no-console
@@ -151,7 +158,32 @@ export async function hydratePersistence(): Promise<HydrationResult> {
         console.warn('[workout.persistence] loadSessionCountSince failed:', e);
         return 0;
       }),
+      loadAllWorkoutTemplates().catch((e) => {
+        // eslint-disable-next-line no-console
+        console.warn(
+          '[workout.persistence] loadAllWorkoutTemplates failed:',
+          e,
+        );
+        return [];
+      }),
     ]);
+
+    // Seed the in-memory workout library from persisted rows.
+    // `persistedTemplates[].payload` is the JSON-deserialised
+    // WorkoutTemplate. Bad/missing payloads are silently dropped.
+    const importedTemplates: WorkoutTemplate[] = [];
+    for (const row of persistedTemplates ?? []) {
+      const p = row.payload as Partial<WorkoutTemplate> | null;
+      if (
+        p &&
+        typeof p.id === 'string' &&
+        typeof p.name === 'string' &&
+        Array.isArray(p.exercises)
+      ) {
+        importedTemplates.push(p as WorkoutTemplate);
+      }
+    }
+    setImportedTemplatesForHydration(importedTemplates);
 
     const setMemory: SetMemory = {};
     for (const [k, v] of Object.entries(memoryMap)) {
@@ -409,6 +441,33 @@ export async function persistWeightUnit(unit: string): Promise<void> {
   } catch (e) {
     // eslint-disable-next-line no-console
     console.warn('[workout.persistence] persistWeightUnit failed:', e);
+  }
+}
+
+/**
+ * Persist a user-imported workout template. Fire-and-forget;
+ * resolves regardless of outcome. Returns false on failure so
+ * the UI can choose to surface "memory-only" status, but the
+ * in-memory library is always updated by the caller
+ * (`importWorkoutFromText` does that synchronously).
+ */
+export async function persistImportedWorkoutTemplate(
+  template: WorkoutTemplate,
+): Promise<boolean> {
+  if (isPersistenceDisabled()) return false;
+  try {
+    return await saveWorkoutTemplate({
+      id: template.id,
+      name: template.name,
+      template,
+    });
+  } catch (e) {
+    // eslint-disable-next-line no-console
+    console.warn(
+      '[workout.persistence] persistImportedWorkoutTemplate failed:',
+      e,
+    );
+    return false;
   }
 }
 
