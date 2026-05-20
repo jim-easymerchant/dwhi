@@ -21,8 +21,11 @@
 
 import {
   appendQuestHistory,
+  disablePersistence,
   getMostRecentCompletedAtIso,
+  getPersistenceDisabledReason,
   initDatabase,
+  isPersistenceDisabled,
   loadAllSetMemory,
   loadPlayerMomentum,
   recordIfPersonalRecord,
@@ -71,22 +74,53 @@ interface HydrationResult {
  * Load persisted state into the store. Safe to call multiple times —
  * later calls are still cheap because the DB connection is cached.
  *
- * Failures are swallowed (the app stays usable with default state)
- * and surfaced through the return value so the UI can choose to
- * show a quiet "history not loaded yet" hint.
+ * Guarantees:
+ *   - never throws (the async function always resolves)
+ *   - on success, sets persistenceReady=true and seeds the store
+ *   - on failure, sets persistenceReady=true,
+ *     persistenceDisabled=true, persistenceError=message
+ *   - the store flags are the contract the UI reads to surface
+ *     the "memory-only" diagnostic
  */
 export async function hydratePersistence(): Promise<HydrationResult> {
+  // Defensive belt: even if a future caller manages to invoke us
+  // after persistence has been disabled (e.g. by a repo writing
+  // before hydrate ran), don't pretend the DB is healthy.
+  if (isPersistenceDisabled()) {
+    const reason = getPersistenceDisabledReason() ?? 'unknown';
+    setStoreToMemoryOnly(reason);
+    return { ok: false, error: reason, setMemoryCount: 0 };
+  }
+
   try {
     await initDatabase();
     const [memoryMap, momentum, lastSessionAtIso] = await Promise.all([
-      loadAllSetMemory(),
-      loadPlayerMomentum(),
-      getMostRecentCompletedAtIso(),
+      loadAllSetMemory().catch((e) => {
+        // eslint-disable-next-line no-console
+        console.warn('[workout.persistence] loadAllSetMemory failed:', e);
+        return {} as Record<string, PersistedSetMemoryEntry>;
+      }),
+      loadPlayerMomentum().catch((e) => {
+        // eslint-disable-next-line no-console
+        console.warn('[workout.persistence] loadPlayerMomentum failed:', e);
+        return null;
+      }),
+      getMostRecentCompletedAtIso().catch((e) => {
+        // eslint-disable-next-line no-console
+        console.warn('[workout.persistence] last-completed-at failed:', e);
+        return null;
+      }),
     ]);
 
     const setMemory: SetMemory = {};
     for (const [k, v] of Object.entries(memoryMap)) {
-      setMemory[k] = persistedToStoreEntry(v);
+      try {
+        setMemory[k] = persistedToStoreEntry(v);
+      } catch (e) {
+        // Skip malformed rows; never let one bad row sink hydrate.
+        // eslint-disable-next-line no-console
+        console.warn(`[workout.persistence] skipping malformed row ${k}:`, e);
+      }
     }
 
     useWorkoutGameStore.setState({
@@ -94,14 +128,35 @@ export async function hydratePersistence(): Promise<HydrationResult> {
       priorMomentum: momentum?.value ?? DEFAULT_PRIOR_MOMENTUM,
       lastSessionAtIso: lastSessionAtIso ?? momentum?.lastSessionAtIso ?? null,
       persistenceReady: true,
+      persistenceDisabled: false,
+      persistenceError: null,
     });
     return { ok: true, error: null, setMemoryCount: Object.keys(setMemory).length };
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     // eslint-disable-next-line no-console
     console.warn('[workout.persistence] hydrate failed:', msg);
-    useWorkoutGameStore.setState({ persistenceReady: true });
+    // Make sure the DB layer is latched off — even if the failure
+    // came from somewhere init() didn't already mark.
+    disablePersistence(msg);
+    setStoreToMemoryOnly(msg);
     return { ok: false, error: msg, setMemoryCount: 0 };
+  }
+}
+
+/** Single point of truth for the "fall back to memory-only" flip. */
+function setStoreToMemoryOnly(message: string): void {
+  try {
+    useWorkoutGameStore.setState({
+      persistenceReady: true,
+      persistenceDisabled: true,
+      persistenceError: message,
+    });
+  } catch (e) {
+    // Zustand's setState shouldn't throw, but if it does we still
+    // want startup to survive.
+    // eslint-disable-next-line no-console
+    console.warn('[workout.persistence] setStoreToMemoryOnly failed:', e);
   }
 }
 
@@ -133,10 +188,15 @@ export interface PersistLoggedSetInput {
  * list of PR kinds that were upgraded (the caller can use this to
  * decorate the log entry; the store can opt to refresh the PR cache
  * if it carries one).
+ *
+ * Guarantees: never throws. Short-circuits when persistence is
+ * disabled — repeated calls after a failed init do not keep hitting
+ * the native bridge.
  */
 export async function persistLoggedSet(
   input: PersistLoggedSetInput,
 ): Promise<readonly PRKind[]> {
+  if (isPersistenceDisabled()) return [];
   try {
     const now = clockNow();
     await saveSetMemory(
@@ -164,6 +224,13 @@ export async function persistLoggedSet(
     const msg = e instanceof Error ? e.message : String(e);
     // eslint-disable-next-line no-console
     console.warn('[workout.persistence] persistLoggedSet failed:', msg);
+    // If this looks like a structural failure (anything beyond an
+    // ad-hoc write conflict), latch persistence off so we stop
+    // logging the same stack every set.
+    if (looksStructural(msg)) {
+      disablePersistence(`persistLoggedSet: ${msg}`);
+      setStoreToMemoryOnly(`persistLoggedSet: ${msg}`);
+    }
     return [];
   }
 }
@@ -204,12 +271,34 @@ export interface PersistQuestCompletionInput {
  *   - the new resolved Momentum value + last_session_at_iso
  *   - one row in workout_quest_history with denormalised summary
  *     plus the full orchestrator result JSON
+ *
+ * Always reflects the new momentum + lastSessionAtIso into the
+ * store, even if the persistence write fails — the in-memory state
+ * is what the Reward screen reads.
+ *
+ * Guarantees: never throws. Short-circuits when persistence is
+ * disabled.
  */
 export async function persistQuestCompletion(
   input: PersistQuestCompletionInput,
 ): Promise<void> {
+  const completedAt = clockNow();
+
+  // Update the store first so the Reward screen always reflects the
+  // just-completed Quest regardless of disk write outcome.
   try {
-    const completedAt = clockNow();
+    useWorkoutGameStore.setState({
+      priorMomentum: input.finalMomentum,
+      lastSessionAtIso: completedAt,
+    });
+  } catch (e) {
+    // eslint-disable-next-line no-console
+    console.warn('[workout.persistence] store reflect failed:', e);
+  }
+
+  if (isPersistenceDisabled()) return;
+
+  try {
     await savePlayerMomentum({
       value: input.finalMomentum,
       lastSessionAtIso: completedAt,
@@ -236,18 +325,33 @@ export async function persistQuestCompletion(
         : null,
     };
     await appendQuestHistory(record);
-
-    // Reflect the just-persisted state back into the store so the
-    // home screen sees the new Momentum without needing a re-hydrate.
-    useWorkoutGameStore.setState({
-      priorMomentum: input.finalMomentum,
-      lastSessionAtIso: completedAt,
-    });
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     // eslint-disable-next-line no-console
     console.warn('[workout.persistence] persistQuestCompletion failed:', msg);
+    if (looksStructural(msg)) {
+      disablePersistence(`persistQuestCompletion: ${msg}`);
+      setStoreToMemoryOnly(`persistQuestCompletion: ${msg}`);
+    }
   }
+}
+
+/**
+ * Recognise messages from the DB layer that signal "the persistence
+ * pipeline is fundamentally broken, stop trying." Open / migration /
+ * native-bridge failures latch persistence off. Per-row violations
+ * (foreign-key, unique conflict, etc.) do not.
+ */
+function looksStructural(message: string): boolean {
+  return (
+    /persistence disabled/i.test(message) ||
+    /open.*async/i.test(message) ||
+    /initDatabase/i.test(message) ||
+    /database is locked/i.test(message) ||
+    /no such table/i.test(message) ||
+    /no such column/i.test(message) ||
+    /not a database/i.test(message)
+  );
 }
 
 function safeStringify(value: unknown): string {

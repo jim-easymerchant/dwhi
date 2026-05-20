@@ -13,12 +13,16 @@
  */
 
 export {
+  __clearDisabledForTests,
   __resetInitCacheForTests,
   addColumnIfMissing,
   columnExists,
   createIndexIfColumnExists,
+  disablePersistence,
   getDb,
+  getPersistenceDisabledReason,
   initDatabase,
+  isPersistenceDisabled,
   nowIso,
   resetDatabase,
 } from './db';

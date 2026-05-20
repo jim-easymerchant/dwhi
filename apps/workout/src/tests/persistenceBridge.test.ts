@@ -15,6 +15,12 @@ jest.mock('../persistence', () => {
   const listRecentQuests = jest.fn().mockResolvedValue([]);
   const recordIfPersonalRecord = jest.fn().mockResolvedValue([]);
   const initDatabase = jest.fn().mockResolvedValue(undefined);
+  // The bridge consults isPersistenceDisabled() before every call;
+  // default it to false so the existing tests behave the same as
+  // before the disabled-latch landed.
+  const isPersistenceDisabled = jest.fn(() => false);
+  const getPersistenceDisabledReason = jest.fn(() => null);
+  const disablePersistence = jest.fn();
   return {
     saveSetMemory,
     loadAllSetMemory,
@@ -25,6 +31,9 @@ jest.mock('../persistence', () => {
     listRecentQuests,
     recordIfPersonalRecord,
     initDatabase,
+    isPersistenceDisabled,
+    getPersistenceDisabledReason,
+    disablePersistence,
   };
 });
 
