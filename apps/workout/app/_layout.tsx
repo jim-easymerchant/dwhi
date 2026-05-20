@@ -161,6 +161,12 @@ async function bootPersistence(): Promise<void> {
             console.warn('[workout._layout] persistQuestCompletion rejected:', e);
           });
       },
+      onThemeChanged: (themeId) => {
+        bridge.persistThemeSelection(themeId).catch((e) => {
+          // eslint-disable-next-line no-console
+          console.warn('[workout._layout] persistThemeSelection rejected:', e);
+        });
+      },
     });
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);

@@ -24,6 +24,9 @@ jest.mock('../persistence', () => {
     disablePersistence: jest.fn((reason: string) => {
       if (disabledReason === null) disabledReason = reason;
     }),
+    // Theme repository — added by the theme-packs-and-settings branch.
+    loadStoredThemeId: jest.fn().mockResolvedValue(null),
+    saveStoredThemeId: jest.fn().mockResolvedValue(true),
     __testResetDisabled: () => {
       disabledReason = null;
     },

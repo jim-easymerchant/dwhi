@@ -13,6 +13,7 @@ import { resolveMomentumTier } from '@dwhi/workout-domain';
 
 import { CampScene } from '../render';
 import { useWorkoutGameStore } from '../state/workoutGameStore';
+import { getTheme } from '../theme';
 import { workoutColors, workoutRadii, workoutSpacing, workoutType } from '../theme/workoutColors';
 
 export function HomeScreen(): JSX.Element {
@@ -21,6 +22,8 @@ export function HomeScreen(): JSX.Element {
   const priorMomentum = useWorkoutGameStore((s) => s.priorMomentum);
   const persistenceError = useWorkoutGameStore((s) => s.persistenceError);
   const persistenceDisabled = useWorkoutGameStore((s) => s.persistenceDisabled);
+  const selectedThemeId = useWorkoutGameStore((s) => s.selectedThemeId);
+  const openSettings = useWorkoutGameStore((s) => s.openSettings);
 
   // Dev-only diagnostic: in development builds, surface the
   // persistence failure as a small muted banner so we don't lose
@@ -32,14 +35,35 @@ export function HomeScreen(): JSX.Element {
   // tier — Rusted dims the room, Ascendant lights the hearth.
   const tier = resolveMomentumTier(priorMomentum);
 
+  // The active theme drives copy + accent colour on this screen.
+  const theme = getTheme(selectedThemeId);
+  const enemyIntro = theme.enemyFlavor.introCopy('Sluggard, Lord of Couches');
+
   return (
     <SafeAreaView style={styles.safe}>
       <ScrollView contentContainerStyle={styles.scroll}>
+        <View style={styles.topBar}>
+          <View style={styles.topBarSpacer} />
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Open settings"
+            testID="home-open-settings"
+            style={({ pressed }) => [styles.settingsBtn, pressed && styles.pressed]}
+            onPress={openSettings}
+          >
+            <Text style={styles.settingsBtnText}>⚙</Text>
+          </Pressable>
+        </View>
+
         <Text style={styles.title}>The Hollow</Text>
-        <Text style={styles.subtitle}>Steady. The Ember glows.</Text>
+        <Text style={styles.subtitle}>{theme.motivational.tagline}</Text>
 
         <View style={styles.campWrap}>
-          <CampScene tier={tier} testID="home-camp-scene" />
+          <CampScene
+            tier={tier}
+            overlayColor={theme.paletteOverrides?.hearth}
+            testID="home-camp-scene"
+          />
         </View>
 
         {showDiag && (
@@ -68,9 +92,7 @@ export function HomeScreen(): JSX.Element {
         <View style={styles.questCard}>
           <Text style={styles.questLabel}>Quest</Text>
           <Text style={styles.questName}>Push Day</Text>
-          <Text style={styles.questDesc}>
-            Sluggard, Lord of Couches has settled in the room.
-          </Text>
+          <Text style={styles.questDesc}>{enemyIntro}</Text>
         </View>
 
         <View style={styles.variantRow}>
@@ -78,7 +100,10 @@ export function HomeScreen(): JSX.Element {
             accessibilityRole="button"
             style={({ pressed }) => [
               styles.variantButton,
-              modality === 'bodyweight' && styles.variantButtonActive,
+              modality === 'bodyweight' && [
+                styles.variantButtonActive,
+                { borderColor: theme.uiAccent.primary },
+              ],
               pressed && styles.pressed,
             ]}
             onPress={() => startQuest('bodyweight')}
@@ -89,7 +114,10 @@ export function HomeScreen(): JSX.Element {
             accessibilityRole="button"
             style={({ pressed }) => [
               styles.variantButton,
-              modality === 'weighted' && styles.variantButtonActive,
+              modality === 'weighted' && [
+                styles.variantButtonActive,
+                { borderColor: theme.uiAccent.primary },
+              ],
               pressed && styles.pressed,
             ]}
             onPress={() => startQuest('weighted')}
@@ -98,7 +126,9 @@ export function HomeScreen(): JSX.Element {
           </Pressable>
         </View>
 
-        <Text style={styles.vow}>The Vow holds.</Text>
+        <Text style={styles.vow}>
+          {theme.tone === 'arcade-tavern' ? 'STEEL THE NERVE.' : 'The Vow holds.'}
+        </Text>
       </ScrollView>
     </SafeAreaView>
   );
@@ -115,6 +145,26 @@ const styles = StyleSheet.create({
   title: { ...workoutType.title, textAlign: 'center' },
   subtitle: { ...workoutType.label, textAlign: 'center' },
   campWrap: { alignItems: 'center', marginTop: workoutSpacing.md },
+  topBar: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  topBarSpacer: { flex: 1 },
+  settingsBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: workoutColors.surface,
+    borderWidth: 1,
+    borderColor: workoutColors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  settingsBtnText: {
+    fontSize: 18,
+    color: workoutColors.textSecondary,
+  },
   emberRow: { alignItems: 'center', marginVertical: workoutSpacing.md },
   emberBarTrack: {
     width: '80%',

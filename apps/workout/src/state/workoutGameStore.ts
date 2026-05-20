@@ -70,6 +70,8 @@ export interface PersistenceHandlers {
     finalMomentum: number;
     payload?: unknown;
   }) => void;
+  /** Fired when the player selects a theme. Fire-and-forget. */
+  onThemeChanged?: (themeId: string) => void;
 }
 
 let handlers: PersistenceHandlers = {};
@@ -100,7 +102,7 @@ export const PLAN_EXPANSION_PER_CONTINUATION = 3;
 // Phase
 // ---------------------------------------------------------------------------
 
-export type GamePhase = 'home' | 'battle' | 'rest' | 'reward';
+export type GamePhase = 'home' | 'battle' | 'rest' | 'reward' | 'settings';
 
 // ---------------------------------------------------------------------------
 // Logged set + set memory
@@ -219,6 +221,9 @@ export interface WorkoutGameState {
    * `daysSinceLastQuest` value passed to runQuest. */
   lastSessionAtIso: string | null;
 
+  /** Currently selected theme pack id ('momentum' or 'ironquest-classic'). */
+  selectedThemeId: string;
+
   // --- modality + variant ---
   modality: Variant;
   currentVariantId: string;
@@ -247,6 +252,10 @@ export interface WorkoutGameState {
 
   // --- transitions ---
   startQuest: (modality: Variant) => void;
+  /** Open the Settings panel from anywhere. */
+  openSettings: () => void;
+  /** Set the active theme pack. Unknown ids fall back silently. */
+  setTheme: (themeId: string) => void;
   setReps: (reps: number) => void;
   setWeight: (weightKg: number) => void;
   logCurrentSet: () => void;
@@ -382,6 +391,11 @@ export const useWorkoutGameStore = create<WorkoutGameState>((set, get) => ({
   persistenceError: null,
   lastSessionAtIso: null,
 
+  // The active theme pack. Hydration may overwrite this from the
+  // persisted preference; an unknown stored id falls back to
+  // 'momentum' via the theme registry's safeThemeId helper.
+  selectedThemeId: 'momentum',
+
   modality: 'bodyweight',
   currentVariantId: INITIAL_VARIANT.id,
   currentSetIndexInVariant: 0,
@@ -427,6 +441,32 @@ export const useWorkoutGameStore = create<WorkoutGameState>((set, get) => ({
   },
 
   // -------------------------------------------------------------------
+  // -------------------------------------------------------------------
+  openSettings: () => set(() => ({ phase: 'settings' })),
+
+  // -------------------------------------------------------------------
+  setTheme: (themeId) => {
+    // The registry-aware validation lives in `safeThemeId`. We
+    // import lazily here (a require inside the function body) to
+    // keep the store module's static graph free of theme code —
+    // the screens importing the store get exactly the same bundle
+    // they got before the theme system landed. The theme module
+    // is pure TypeScript with no native dependencies, so the
+    // require is cheap and safe.
+    let safe: string = themeId;
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports, global-require
+      const { safeThemeId } = require('../theme/themeRegistry') as typeof import('../theme/themeRegistry');
+      safe = safeThemeId(themeId);
+    } catch {
+      // If theme module fails to load (it shouldn't — pure TS),
+      // accept the raw id and let downstream getTheme() guard.
+    }
+    set(() => ({ selectedThemeId: safe }));
+    // Fire-and-forget persistence.
+    handlers.onThemeChanged?.(safe);
+  },
+
   setReps: (reps) => set(() => ({ draftReps: Math.max(0, Math.floor(reps)) })),
 
   setWeight: (weightKg) =>
