@@ -120,6 +120,19 @@ emotional texture of the long game. They do not expand MVP scope.
     HomeScreen gear button opens it; BattleScreen routes the
     theme's preferred sprite id; CampScene accepts a theme-
     overlay tint.
+19. [`019-tavern-home-layout.md`](./019-tavern-home-layout.md)
+    — tavern-style home layout: TavernHeader, TavernSceneFrame,
+    TavernStatusRow (LEVEL/LAST/WEIGHT), AmbientPanel ("Tonight
+    in the Hollow" / "TONIGHT'S PATRONS"), QuestSelectionPanel
+    + QuestCard (with exercise preview), three expandable
+    EchoLogPanels, TavernFooterActions. ThemePack gains five
+    sub-shapes (`headerCopy`, `ambient`, `questCard`,
+    `panelLabels`, `footer`); `getAmbientLines(themeId, tier)`
+    generator with Momentum fallback. HomeScreen becomes a thin
+    composition shell with a grep-enforced content boundary —
+    zero theme-specific strings inline. Anti-shame regression
+    tests reject "lazy", "skipped", "missed", "weak", "calorie",
+    "bmi", etc. across every home-surface string.
 
 ### Provisioning
 

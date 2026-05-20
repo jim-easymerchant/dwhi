@@ -48,7 +48,14 @@ export {
   questStartLine,
 } from './narration';
 
+export {
+  getAmbientLines,
+  getAmbientSceneFlavor,
+  getAmbientSectionLabel,
+} from './ambient';
+
 export type {
+  AmbientLine,
   CampStyle,
   ComebackContext,
   EnemyDefeatContext,
@@ -56,13 +63,18 @@ export type {
   LongAbsenceContext,
   PreferredSpriteIds,
   QuestStartContext,
+  ThemeAmbient,
   ThemeEnemyFlavor,
+  ThemeFooter,
+  ThemeHeaderCopy,
   ThemeId,
   ThemeMotivational,
   ThemeNarration,
   ThemeNarrationStyle,
   ThemePack,
   ThemePaletteOverrides,
+  ThemePanelLabels,
+  ThemeQuestCard,
   ThemeTone,
   ThemeUiAccent,
 } from './themeTypes';
