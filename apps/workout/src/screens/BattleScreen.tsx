@@ -34,6 +34,12 @@ import { RestScreen } from './RestScreen';
 import { buttonStyles, victoryButtonsStyle } from './__styleReflection';
 import { MonsterSprite } from '../render';
 import { getTheme } from '../theme';
+import {
+  displayWeight,
+  draftToCanonicalKg,
+  formatWeight,
+  stepSizeKg,
+} from '../units';
 
 export function BattleScreen(): JSX.Element {
   const phase = useWorkoutGameStore((s) => s.phase);
@@ -59,6 +65,7 @@ export function BattleScreen(): JSX.Element {
   const lastSetDamage = useWorkoutGameStore((s) => s.lastSetDamage);
   const victoryAvailable = useWorkoutGameStore((s) => s.victoryAvailable);
   const enemyPhaseIndex = useWorkoutGameStore((s) => s.enemyPhaseIndex);
+  const weightUnit = useWorkoutGameStore((s) => s.weightUnit);
 
   if (phase === 'rest') {
     return <RestScreen />;
@@ -102,17 +109,36 @@ export function BattleScreen(): JSX.Element {
             />
           </View>
 
-          <View style={styles.hpBarTrack}>
-            <View
-              style={[
-                styles.hpBarFill,
-                { width: `${Math.max(0, Math.min(100, progressPct))}%` },
-              ]}
-            />
+          <View
+            testID="battle-hp-block"
+            style={styles.hpBlock}
+            accessibilityRole="progressbar"
+            accessibilityLabel={`Enemy HP ${Math.round(currentEnemyHp)} of ${currentEnemy.maxHp}, ${progressPct} percent dealt`}
+          >
+            <View style={styles.hpHeaderRow}>
+              <Text style={styles.hpHeaderLabel}>HP</Text>
+              {enemyPhaseIndex > 0 ? (
+                <Text testID="battle-hp-phase" style={styles.hpPhaseTag}>
+                  PHASE {enemyPhaseIndex + 1}
+                </Text>
+              ) : null}
+            </View>
+            <View style={styles.hpBarTrack} testID="battle-hp-track">
+              <View
+                testID="battle-hp-fill"
+                style={[
+                  styles.hpBarFill,
+                  {
+                    width: `${Math.max(0, Math.min(100, 100 - progressPct))}%`,
+                    backgroundColor: theme.uiAccent.danger,
+                  },
+                ]}
+              />
+            </View>
+            <Text testID="battle-hp-text" style={styles.hpText}>
+              {Math.round(currentEnemyHp)} / {currentEnemy.maxHp}  ·  {progressPct}% dealt
+            </Text>
           </View>
-          <Text style={styles.hpText}>
-            {Math.round(currentEnemyHp)} / {currentEnemy.maxHp}  ·  {progressPct}%
-          </Text>
 
           {lastSetDamage !== null && lastSetDamage > 0 && (
             <View
@@ -200,22 +226,30 @@ export function BattleScreen(): JSX.Element {
 
             {useWeighted && (
               <View style={styles.stepperRow}>
-                <Text style={styles.stepperLabel}>Weight (kg)</Text>
+                <Text style={styles.stepperLabel}>Weight ({weightUnit})</Text>
                 <View style={styles.stepper}>
                   <Pressable
                     accessibilityRole="button"
                     accessibilityLabel="Decrease weight"
                     style={styles.stepperButton}
-                    onPress={() => setWeight(Math.max(0, draftWeightKg - 2.5))}
+                    onPress={() =>
+                      setWeight(
+                        Math.max(0, draftWeightKg - stepSizeKg(weightUnit)),
+                      )
+                    }
                   >
                     <Text style={styles.stepperButtonText}>−</Text>
                   </Pressable>
-                  <Text style={styles.stepperValue}>{draftWeightKg}</Text>
+                  <Text testID="battle-weight-display" style={styles.stepperValue}>
+                    {displayWeight(draftWeightKg, weightUnit)}
+                  </Text>
                   <Pressable
                     accessibilityRole="button"
                     accessibilityLabel="Increase weight"
                     style={styles.stepperButton}
-                    onPress={() => setWeight(draftWeightKg + 2.5)}
+                    onPress={() =>
+                      setWeight(draftWeightKg + stepSizeKg(weightUnit))
+                    }
                   >
                     <Text style={styles.stepperButtonText}>+</Text>
                   </Pressable>
@@ -294,7 +328,9 @@ export function BattleScreen(): JSX.Element {
                   >
                     <Text style={[styles.logRowText, isLatest && styles.logRowTextLatest]}>
                       {row.exerciseName} · {row.reps}
-                      {row.weightKg ? ` × ${row.weightKg}kg` : ' reps'}
+                      {row.weightKg
+                        ? ` × ${formatWeight(row.weightKg, weightUnit)}`
+                        : ' reps'}
                       {row.isPersonalRecord ? '  ✦' : ''}
                       {row.finisher ? '  ◇' : ''}
                       {`  —  ${Math.round(row.damage)} dmg`}
@@ -344,19 +380,48 @@ const styles = StyleSheet.create({
     borderColor: workoutColors.emberDim,
     opacity: 0.6,
   },
-  hpBarTrack: {
-    width: '80%',
-    height: 10,
-    borderRadius: workoutRadii.pill,
+  hpBlock: {
+    width: '100%',
+    marginTop: workoutSpacing.md,
+    paddingHorizontal: workoutSpacing.md,
+    paddingVertical: workoutSpacing.sm,
     backgroundColor: workoutColors.surface,
+    borderRadius: workoutRadii.md,
+    borderWidth: 1,
+    borderColor: workoutColors.border,
+    gap: workoutSpacing.xs,
+  },
+  hpHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  hpHeaderLabel: {
+    ...workoutType.caption,
+    letterSpacing: 2,
+    color: workoutColors.textMuted,
+  },
+  hpPhaseTag: {
+    ...workoutType.caption,
+    letterSpacing: 2,
+    color: workoutColors.ember,
+  },
+  hpBarTrack: {
+    width: '100%',
+    height: 14,
+    borderRadius: workoutRadii.pill,
+    backgroundColor: workoutColors.surfaceElevated,
     overflow: 'hidden',
-    marginTop: workoutSpacing.sm,
   },
   hpBarFill: {
     height: '100%',
-    backgroundColor: workoutColors.ember,
+    backgroundColor: workoutColors.hearth,
   },
-  hpText: { ...workoutType.caption, color: workoutColors.textSecondary },
+  hpText: {
+    ...workoutType.body,
+    color: workoutColors.textPrimary,
+    fontVariant: ['tabular-nums'],
+  },
   lastDamageBadge: {
     flexDirection: 'row',
     alignItems: 'baseline',

@@ -49,6 +49,7 @@ export {
   appendQuestHistory,
   getMostRecentCompletedAtIso,
   listRecentQuests,
+  loadTotalQuestXp,
   type QuestHistoryRecord,
 } from './questHistoryRepository';
 
@@ -66,5 +67,7 @@ export {
 export {
   __wipeThemeStoreForTests,
   loadStoredThemeId,
+  loadStoredWeightUnit,
   saveStoredThemeId,
+  saveStoredWeightUnit,
 } from './themeRepository';

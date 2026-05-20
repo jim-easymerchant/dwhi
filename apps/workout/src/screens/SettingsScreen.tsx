@@ -32,6 +32,7 @@ import {
   workoutType,
 } from '../theme/workoutColors';
 import { useWorkoutGameStore } from '../state/workoutGameStore';
+import { safeWeightUnit, type WeightUnit } from '../units';
 
 export function SettingsScreen(): JSX.Element {
   const selectedThemeId = useWorkoutGameStore((s) => s.selectedThemeId);
@@ -40,10 +41,13 @@ export function SettingsScreen(): JSX.Element {
   const persistenceReady = useWorkoutGameStore((s) => s.persistenceReady);
   const persistenceDisabled = useWorkoutGameStore((s) => s.persistenceDisabled);
   const persistenceError = useWorkoutGameStore((s) => s.persistenceError);
+  const weightUnit = useWorkoutGameStore((s) => s.weightUnit);
+  const setWeightUnit = useWorkoutGameStore((s) => s.setWeightUnit);
 
   const themes = listThemes();
   const safe = safeThemeId(selectedThemeId);
   const preview: ThemePack | undefined = themes.find((t) => t.id === safe);
+  const safeUnit = safeWeightUnit(weightUnit);
 
   const buildInfo = readBuildInfo();
 
@@ -66,6 +70,28 @@ export function SettingsScreen(): JSX.Element {
                 onSelect={setTheme}
               />
             ))}
+          </View>
+        </Section>
+
+        {/* ---- Weight unit ----------------------------------------- */}
+        <Section label="Weight unit">
+          <Text style={styles.body}>
+            How weights are shown. Internally stored in kilograms; the
+            display flips between pounds and kilograms instantly.
+          </Text>
+          <View style={styles.unitToggleRow}>
+            <UnitChip
+              label="lb"
+              hint="pounds"
+              active={safeUnit === 'lb'}
+              onPress={() => setWeightUnit('lb')}
+            />
+            <UnitChip
+              label="kg"
+              hint="kilograms"
+              active={safeUnit === 'kg'}
+              onPress={() => setWeightUnit('kg')}
+            />
           </View>
         </Section>
 
@@ -163,6 +189,43 @@ function Row({
   );
 }
 
+function UnitChip({
+  label,
+  hint,
+  active,
+  onPress,
+}: {
+  label: WeightUnit;
+  hint: string;
+  active: boolean;
+  onPress: () => void;
+}): JSX.Element {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityState={{ selected: active }}
+      accessibilityLabel={`Use ${hint}`}
+      testID={`settings-unit-${label}`}
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.unitChip,
+        active && styles.unitChipActive,
+        pressed && styles.pressed,
+      ]}
+    >
+      <Text
+        style={[
+          styles.unitChipLabel,
+          active && styles.unitChipLabelActive,
+        ]}
+      >
+        {label}
+      </Text>
+      <Text style={styles.unitChipHint}>{hint}</Text>
+    </Pressable>
+  );
+}
+
 function PlaceholderLine({ label }: { label: string }): JSX.Element {
   return (
     <View style={styles.placeholderRow}>
@@ -215,6 +278,39 @@ const styles = StyleSheet.create({
   sectionBody: { gap: workoutSpacing.sm },
   body: { ...workoutType.body, color: workoutColors.textSecondary },
   themeList: { gap: workoutSpacing.md, marginTop: workoutSpacing.sm },
+  unitToggleRow: {
+    flexDirection: 'row',
+    gap: workoutSpacing.sm,
+    marginTop: workoutSpacing.sm,
+  },
+  unitChip: {
+    flex: 1,
+    paddingVertical: workoutSpacing.md,
+    paddingHorizontal: workoutSpacing.md,
+    borderRadius: workoutRadii.md,
+    borderWidth: 1,
+    borderColor: workoutColors.border,
+    backgroundColor: workoutColors.surface,
+    alignItems: 'center',
+    gap: 2,
+  },
+  unitChipActive: {
+    borderColor: workoutColors.ember,
+    backgroundColor: workoutColors.surfaceElevated,
+  },
+  unitChipLabel: {
+    ...workoutType.heading,
+    fontSize: 22,
+    color: workoutColors.textSecondary,
+    letterSpacing: 2,
+  },
+  unitChipLabelActive: {
+    color: workoutColors.ember,
+  },
+  unitChipHint: {
+    ...workoutType.caption,
+    color: workoutColors.textMuted,
+  },
   previewWrap: {
     alignItems: 'center',
     paddingVertical: workoutSpacing.md,

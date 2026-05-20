@@ -24,7 +24,6 @@ import {
   PatronsPanel,
   QuestSelectionPanel,
   TavernFooterActions,
-  TavernHeader,
   TavernSceneFrame,
   TavernStatusRow,
 } from '../components/tavern';
@@ -61,6 +60,8 @@ export function HomeScreen(): JSX.Element {
   const persistenceDisabled = useWorkoutGameStore((s) => s.persistenceDisabled);
   const selectedThemeId = useWorkoutGameStore((s) => s.selectedThemeId);
   const openSettings = useWorkoutGameStore((s) => s.openSettings);
+  const weightUnit = useWorkoutGameStore((s) => s.weightUnit);
+  const cumulativeXp = useWorkoutGameStore((s) => s.cumulativeXp);
 
   // Dev-only diagnostic: surface persistence failures as a small
   // muted banner. Production builds never see this — __DEV__ is
@@ -107,25 +108,31 @@ export function HomeScreen(): JSX.Element {
   return (
     <SafeAreaView style={styles.safe}>
       <ScrollView contentContainerStyle={styles.scroll}>
-        <TavernHeader
-          testID="home-header"
-          title={theme.headerCopy.title}
-          subtitle={theme.headerCopy.subtitle}
-          onOpenSettings={openSettings}
-        />
-
         <TavernSceneFrame
           testID="home-scene-frame"
           tier={tier}
           overlayColor={theme.paletteOverrides?.hearth}
           flavorLine={sceneFlavorLine}
+          signText={
+            theme.id === 'ironquest-classic'
+              ? theme.headerCopy.title
+              : undefined
+          }
+          signSubtitle={
+            theme.id === 'ironquest-classic'
+              ? theme.headerCopy.subtitle
+              : undefined
+          }
+          signColor={theme.uiAccent.primary}
+          onOpenSettings={openSettings}
         />
 
         <TavernStatusRow
           testID="home-status-row"
-          momentum={priorMomentum}
+          cumulativeXp={cumulativeXp}
           daysSinceLastQuest={daysSince}
           bodyweightKg={bodyweightKg}
+          weightUnit={weightUnit}
           accentColor={theme.uiAccent.primary}
         />
 

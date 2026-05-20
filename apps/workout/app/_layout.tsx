@@ -167,6 +167,12 @@ async function bootPersistence(): Promise<void> {
           console.warn('[workout._layout] persistThemeSelection rejected:', e);
         });
       },
+      onWeightUnitChanged: (unit) => {
+        bridge.persistWeightUnit(unit).catch((e) => {
+          // eslint-disable-next-line no-console
+          console.warn('[workout._layout] persistWeightUnit rejected:', e);
+        });
+      },
     });
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);

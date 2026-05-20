@@ -127,6 +127,29 @@ export async function listRecentQuests(limit = 20): Promise<QuestHistoryRecord[]
   return out;
 }
 
+/**
+ * Sum every recorded quest's xp into a single total. Used by the
+ * hydration path to seed the displayed level from the player's
+ * actual quest history.
+ *
+ * Returns 0 when there are no rows yet, on any DB error, or when
+ * the sum is non-finite. Pure read.
+ */
+export async function loadTotalQuestXp(): Promise<number> {
+  try {
+    const db = await getDb();
+    const row = await db.getFirstAsync<{ total: number | null }>(
+      `SELECT COALESCE(SUM(xp), 0) AS total FROM workout_quest_history;`,
+    );
+    const total = row?.total ?? 0;
+    return Number.isFinite(total) && total > 0 ? total : 0;
+  } catch (e) {
+    // eslint-disable-next-line no-console
+    console.warn('[workout.persistence] loadTotalQuestXp failed:', e);
+    return 0;
+  }
+}
+
 /** Test-only: wipe the table. */
 export async function __wipeQuestHistoryForTests(): Promise<void> {
   const db = await getDb();
