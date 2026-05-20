@@ -107,6 +107,19 @@ emotional texture of the long game. They do not expand MVP scope.
     derived alternates), new optional `spriteId` prop on
     MonsterSprite. Sets up the future fragment generator to ship
     visual variety without re-authoring sprites.
+18. [`018-theme-packs-and-settings.md`](./018-theme-packs-and-settings.md)
+    — theme-pack architecture + Settings panel. Typed `ThemePack`
+    structure (sprite preferences, palette overrides, UI accent,
+    narration tone, enemy-flavour copy, motivational tagline,
+    per-event narration hooks with tone-gate enforcement). Two
+    shipped themes: **Momentum** (quiet-mythic default) and
+    **Iron Quest Classic** (arcade-tavern opt-in). Single-row
+    `workout_settings` SQLite table; safe fallback to Momentum on
+    any corrupted / missing stored value; themes work in
+    memory-only mode. New SettingsScreen + ThemeCard component;
+    HomeScreen gear button opens it; BattleScreen routes the
+    theme's preferred sprite id; CampScene accepts a theme-
+    overlay tint.
 
 ### Provisioning
 

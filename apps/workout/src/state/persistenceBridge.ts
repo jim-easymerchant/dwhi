@@ -28,14 +28,17 @@ import {
   isPersistenceDisabled,
   loadAllSetMemory,
   loadPlayerMomentum,
+  loadStoredThemeId,
   recordIfPersonalRecord,
   savePlayerMomentum,
   saveSetMemory,
+  saveStoredThemeId,
   type PRKind,
   type PRLookupKey,
   type PersistedSetMemoryEntry,
   type QuestHistoryRecord,
 } from '../persistence';
+import { safeThemeId } from '../theme/themeRegistry';
 
 import {
   type DefeatedEnemyEntry,
@@ -94,7 +97,7 @@ export async function hydratePersistence(): Promise<HydrationResult> {
 
   try {
     await initDatabase();
-    const [memoryMap, momentum, lastSessionAtIso] = await Promise.all([
+    const [memoryMap, momentum, lastSessionAtIso, storedThemeId] = await Promise.all([
       loadAllSetMemory().catch((e) => {
         // eslint-disable-next-line no-console
         console.warn('[workout.persistence] loadAllSetMemory failed:', e);
@@ -108,6 +111,11 @@ export async function hydratePersistence(): Promise<HydrationResult> {
       getMostRecentCompletedAtIso().catch((e) => {
         // eslint-disable-next-line no-console
         console.warn('[workout.persistence] last-completed-at failed:', e);
+        return null;
+      }),
+      loadStoredThemeId().catch((e) => {
+        // eslint-disable-next-line no-console
+        console.warn('[workout.persistence] loadStoredThemeId failed:', e);
         return null;
       }),
     ]);
@@ -127,6 +135,7 @@ export async function hydratePersistence(): Promise<HydrationResult> {
       setMemory,
       priorMomentum: momentum?.value ?? DEFAULT_PRIOR_MOMENTUM,
       lastSessionAtIso: lastSessionAtIso ?? momentum?.lastSessionAtIso ?? null,
+      selectedThemeId: safeThemeId(storedThemeId),
       persistenceReady: true,
       persistenceDisabled: false,
       persistenceError: null,
@@ -333,6 +342,21 @@ export async function persistQuestCompletion(
       disablePersistence(`persistQuestCompletion: ${msg}`);
       setStoreToMemoryOnly(`persistQuestCompletion: ${msg}`);
     }
+  }
+}
+
+/**
+ * Save the user's selected theme. Fire-and-forget. Resolves (never
+ * rejects) regardless of outcome — failures are logged. Short-
+ * circuits when persistence is disabled.
+ */
+export async function persistThemeSelection(themeId: string): Promise<void> {
+  if (isPersistenceDisabled()) return;
+  try {
+    await saveStoredThemeId(themeId);
+  } catch (e) {
+    // eslint-disable-next-line no-console
+    console.warn('[workout.persistence] persistThemeSelection failed:', e);
   }
 }
 

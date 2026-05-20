@@ -98,4 +98,18 @@ export const WORKOUT_SCHEMA_STATEMENTS = [
     recorded_at_iso  TEXT NOT NULL,
     PRIMARY KEY (exercise_id, modality, variant_id, kind)
   );`,
+
+  // -----------------------------------------------------------------------
+  // workout_settings
+  //
+  // Single-row (id = 'default') key/value table for app-level
+  // preferences. Today it carries the selected theme id; future
+  // settings (haptics, audio, accessibility) can add columns
+  // additively without breaking existing installs.
+  // -----------------------------------------------------------------------
+  `CREATE TABLE IF NOT EXISTS workout_settings (
+    id              TEXT PRIMARY KEY,
+    theme_id        TEXT,
+    updated_at_iso  TEXT
+  );`,
 ] as const;

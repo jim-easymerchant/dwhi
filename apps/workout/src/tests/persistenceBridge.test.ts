@@ -21,6 +21,10 @@ jest.mock('../persistence', () => {
   const isPersistenceDisabled = jest.fn(() => false);
   const getPersistenceDisabledReason = jest.fn(() => null);
   const disablePersistence = jest.fn();
+  // Theme repository — added by the theme-packs-and-settings
+  // branch. Defaults: no stored theme, save is a no-op success.
+  const loadStoredThemeId = jest.fn().mockResolvedValue(null);
+  const saveStoredThemeId = jest.fn().mockResolvedValue(true);
   return {
     saveSetMemory,
     loadAllSetMemory,
@@ -34,6 +38,8 @@ jest.mock('../persistence', () => {
     isPersistenceDisabled,
     getPersistenceDisabledReason,
     disablePersistence,
+    loadStoredThemeId,
+    saveStoredThemeId,
   };
 });
 

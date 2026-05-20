@@ -62,3 +62,9 @@ export {
   type PRLookupKey,
   type PersonalRecord,
 } from './personalRecordRepository';
+
+export {
+  __wipeThemeStoreForTests,
+  loadStoredThemeId,
+  saveStoredThemeId,
+} from './themeRepository';

@@ -33,6 +33,7 @@ import {
 import { RestScreen } from './RestScreen';
 import { buttonStyles, victoryButtonsStyle } from './__styleReflection';
 import { MonsterSprite } from '../render';
+import { getTheme } from '../theme';
 
 export function BattleScreen(): JSX.Element {
   const phase = useWorkoutGameStore((s) => s.phase);
@@ -52,6 +53,9 @@ export function BattleScreen(): JSX.Element {
   const log = useWorkoutGameStore((s) => s.log);
   const currentEnemy = useWorkoutGameStore((s) => s.currentEnemy);
   const currentEnemyHp = useWorkoutGameStore((s) => s.currentEnemyHp);
+  const selectedThemeId = useWorkoutGameStore((s) => s.selectedThemeId);
+  const theme = getTheme(selectedThemeId);
+  const themedSpriteId = theme.preferredSpriteIds[currentEnemy.category];
   const lastSetDamage = useWorkoutGameStore((s) => s.lastSetDamage);
   const victoryAvailable = useWorkoutGameStore((s) => s.victoryAvailable);
   const enemyPhaseIndex = useWorkoutGameStore((s) => s.enemyPhaseIndex);
@@ -91,6 +95,7 @@ export function BattleScreen(): JSX.Element {
             <MonsterSprite
               mood={currentEnemy.mood}
               category={currentEnemy.category}
+              spriteId={themedSpriteId}
               victoryAvailable={victoryAvailable}
               pixelSize={8}
               testID="battle-monster-sprite"

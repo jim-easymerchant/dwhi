@@ -140,6 +140,13 @@ export interface CampSceneProps {
   scale?: number;
   /** When true, suppress the breathing animation (e.g., during tests). */
   paused?: boolean;
+  /**
+   * Optional theme-pack overlay tint. When supplied, this colour
+   * replaces the tier-derived tint colour — keeps mood lighting
+   * keyed to the player's Momentum AND honours per-theme accent.
+   * The default (undefined) preserves the original behaviour.
+   */
+  overlayColor?: string;
   testID?: string;
 }
 
@@ -147,9 +154,13 @@ export function CampScene({
   tier,
   scale = 1,
   paused = false,
+  overlayColor,
   testID,
 }: CampSceneProps): JSX.Element {
-  const tint = tintFor(tier);
+  const baseTint = tintFor(tier);
+  const tint: CampTint = overlayColor
+    ? { ...baseTint, color: overlayColor }
+    : baseTint;
 
   const breath = React.useRef(new Animated.Value(BREATHING_HIGH)).current;
   React.useEffect(() => {
