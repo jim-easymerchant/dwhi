@@ -9,6 +9,9 @@ import React from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { resolveMomentumTier } from '@dwhi/workout-domain';
+
+import { CampScene } from '../render';
 import { useWorkoutGameStore } from '../state/workoutGameStore';
 import { workoutColors, workoutRadii, workoutSpacing, workoutType } from '../theme/workoutColors';
 
@@ -25,11 +28,19 @@ export function HomeScreen(): JSX.Element {
   // this — `__DEV__` is false in release.
   const showDiag = __DEV__ && persistenceDisabled && persistenceError !== null;
 
+  // Mood lighting in the Camp scene tracks the player's Momentum
+  // tier — Rusted dims the room, Ascendant lights the hearth.
+  const tier = resolveMomentumTier(priorMomentum);
+
   return (
     <SafeAreaView style={styles.safe}>
       <ScrollView contentContainerStyle={styles.scroll}>
         <Text style={styles.title}>The Hollow</Text>
         <Text style={styles.subtitle}>Steady. The Ember glows.</Text>
+
+        <View style={styles.campWrap}>
+          <CampScene tier={tier} testID="home-camp-scene" />
+        </View>
 
         {showDiag && (
           <View
@@ -103,6 +114,7 @@ const styles = StyleSheet.create({
   },
   title: { ...workoutType.title, textAlign: 'center' },
   subtitle: { ...workoutType.label, textAlign: 'center' },
+  campWrap: { alignItems: 'center', marginTop: workoutSpacing.md },
   emberRow: { alignItems: 'center', marginVertical: workoutSpacing.md },
   emberBarTrack: {
     width: '80%',

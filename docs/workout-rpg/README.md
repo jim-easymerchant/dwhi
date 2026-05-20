@@ -97,6 +97,16 @@ emotional texture of the long game. They do not expand MVP scope.
     (`fragmentMap` / `hollowMap` / `wardMap` plus reserved
     `veilMap` / `emberMap`), Battle-screen integration, and the
     queued future-extension list.
+17. [`017-camp-scene-and-ironquest-sprites.md`](./017-camp-scene-and-ironquest-sprites.md)
+    — second port: layered pixel Camp scene on the Home screen +
+    full Iron Quest monster sprite set as registered Momentum
+    assets. Tier-keyed mood lighting (Rusted → Ascendant), animated
+    flame, `SPRITE_REGISTRY` with `SpriteId` union,
+    `CATEGORY_SPRITE_OPTIONS` mapping each Momentum category to a
+    list of sprite ids (Momentum-original default + Iron-Quest-
+    derived alternates), new optional `spriteId` prop on
+    MonsterSprite. Sets up the future fragment generator to ship
+    visual variety without re-authoring sprites.
 
 ### Provisioning
 
