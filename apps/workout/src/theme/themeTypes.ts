@@ -32,6 +32,7 @@ import type {
 } from '@dwhi/workout-domain';
 
 import type { SpriteId } from '../render';
+import type { ThemeWorldState } from '../world/worldTypes';
 
 // ---------------------------------------------------------------------------
 // Identifier union
@@ -278,4 +279,6 @@ export interface ThemePack {
   panelLabels: ThemePanelLabels;
   /** Footer reassurance line. */
   footer: ThemeFooter;
+  /** Ambient world-state controls (patron tone, density, weather). */
+  worldState: ThemeWorldState;
 }

@@ -21,6 +21,7 @@ import { resolveMomentumTier } from '@dwhi/workout-domain';
 import {
   AmbientPanel,
   EchoLogPanel,
+  PatronsPanel,
   QuestSelectionPanel,
   TavernFooterActions,
   TavernHeader,
@@ -41,6 +42,7 @@ import {
   getAmbientSceneFlavor,
   getTheme,
 } from '../theme';
+import { generateNightlyWorld } from '../world';
 import {
   workoutColors,
   workoutRadii,
@@ -71,6 +73,24 @@ export function HomeScreen(): JSX.Element {
   const sceneFlavor = getAmbientSceneFlavor(selectedThemeId, tier);
   const daysSince = computeDaysSinceLastQuest(lastSessionAtIso);
 
+  // Generate the nightly world once per render. The generator is
+  // deterministic — same input gives the same output — so memoising
+  // is fine; the only reason to recompute is when the player's
+  // theme / tier / days-since changes.
+  const world = React.useMemo(
+    () =>
+      generateNightlyWorld({
+        themeId: selectedThemeId,
+        tier,
+        daysSinceLastQuest: daysSince,
+      }),
+    [selectedThemeId, tier, daysSince],
+  );
+
+  // The scene-frame flavour line gets the world's weather (varies
+  // daily) glued to the static theme/tier flavor.
+  const sceneFlavorLine = `${sceneFlavor} ${world.weatherLine}`.trim();
+
   // Exercise previews — read from the static encounter fixtures.
   // The home screen never starts a Quest with these names; it only
   // shows them as a preview so the player knows what they're
@@ -98,7 +118,7 @@ export function HomeScreen(): JSX.Element {
           testID="home-scene-frame"
           tier={tier}
           overlayColor={theme.paletteOverrides?.hearth}
-          flavorLine={sceneFlavor}
+          flavorLine={sceneFlavorLine}
         />
 
         <TavernStatusRow
@@ -126,6 +146,12 @@ export function HomeScreen(): JSX.Element {
           </View>
         )}
 
+        <PatronsPanel
+          testID="home-patrons-panel"
+          sectionLabel={world.patronSectionLabel}
+          patrons={world.patrons}
+        />
+
         <AmbientPanel
           testID="home-ambient-panel"
           sectionLabel={theme.ambient.sectionLabel}
@@ -145,6 +171,12 @@ export function HomeScreen(): JSX.Element {
           onSelectBodyweight={() => startQuest('bodyweight')}
           onSelectWeighted={() => startQuest('weighted')}
         />
+
+        {world.activityHint.length > 0 ? (
+          <Text testID="home-activity-hint" style={styles.activityHint}>
+            {world.activityHint}
+          </Text>
+        ) : null}
 
         <View style={styles.panels}>
           <EchoLogPanel
@@ -187,6 +219,12 @@ const styles = StyleSheet.create({
   },
   panels: {
     gap: workoutSpacing.sm,
+  },
+  activityHint: {
+    ...workoutType.caption,
+    color: workoutColors.textSecondary,
+    textAlign: 'center',
+    fontStyle: 'italic',
   },
   // Dev-only persistence-disabled diagnostic. Muted so it never
   // becomes shame-coded; functional, not alarmist.

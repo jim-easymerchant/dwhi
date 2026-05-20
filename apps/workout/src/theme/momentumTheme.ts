@@ -118,6 +118,20 @@ export const momentumTheme: ThemePack = {
     reassurance: 'Showing up is the rule. The rest is detail.',
   },
 
+  worldState: {
+    patronSectionLabel: 'Tonight at the hearth',
+    ambientDensity: 'sparse',
+    tavernEnergyBias: -0.35,
+    weatherCopy: {
+      rain: 'Rain taps softly on the roof tiles.',
+      wind: 'A low wind moves outside the door.',
+      still: 'The night is still. The hearth answers.',
+      snow: 'Snow falls outside, slow and patient.',
+      fog: 'Fog leans against the windows.',
+      clear: 'The night is clear and quiet.',
+    },
+  },
+
   narration: {
     onQuestStart: () => 'The Vow holds.',
     onEnemyDefeat: ({ enemyName, defeatedPhaseCount }) => {

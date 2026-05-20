@@ -133,6 +133,22 @@ emotional texture of the long game. They do not expand MVP scope.
     zero theme-specific strings inline. Anti-shame regression
     tests reject "lazy", "skipped", "missed", "weak", "calorie",
     "bmi", etc. across every home-surface string.
+20. [`020-world-state-and-patrons.md`](./020-world-state-and-patrons.md)
+    — ambient world layer: `apps/workout/src/world/` module
+    with a deterministic `generateNightlyWorld(...)` generator,
+    an 11-entry patron roster of coaching / emotional
+    archetypes (Spotter, Quiet Runner, Hearthkeeper,
+    Archivist, Challenger, Cook, Night Janitor, Traveler, One
+    Who Stretches, Old Soldier, Newcomer), per-day rotation
+    seeded on the calendar day, theme-aware dialogue pools, and
+    bucketed world-state primitives (timeOfDay, hearthState,
+    roomEnergy, weather, activityHint). New `ThemeWorldState`
+    sub-shape on `ThemePack` (patron section label, ambient
+    density, energy bias, per-bucket weather copy). New
+    PatronsPanel component on the HomeScreen. Anti-shame +
+    no-reference-ironquest-runtime-imports regression tests
+    pin the boundary. Pure presentational — zero mechanics,
+    zero new dependencies, packages/workout-domain untouched.
 
 ### Provisioning
 
