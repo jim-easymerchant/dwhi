@@ -33,6 +33,10 @@ jest.mock('../persistence', () => {
   // Recent-session count — added by the ui-polish branch (023).
   // Default: zero sessions in the recent window.
   const loadSessionCountSince = jest.fn().mockResolvedValue(0);
+  // Workout templates — added by the workout-authoring branch (024).
+  const loadAllWorkoutTemplates = jest.fn().mockResolvedValue([]);
+  const saveWorkoutTemplate = jest.fn().mockResolvedValue(true);
+  const deleteWorkoutTemplate = jest.fn().mockResolvedValue(true);
   return {
     saveSetMemory,
     loadAllSetMemory,
@@ -52,6 +56,9 @@ jest.mock('../persistence', () => {
     saveStoredWeightUnit,
     loadTotalQuestXp,
     loadSessionCountSince,
+    loadAllWorkoutTemplates,
+    saveWorkoutTemplate,
+    deleteWorkoutTemplate,
   };
 });
 

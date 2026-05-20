@@ -33,6 +33,10 @@ jest.mock('../persistence', () => {
     loadTotalQuestXp: jest.fn().mockResolvedValue(0),
     // Recent-session count — added by the ui-polish branch (023).
     loadSessionCountSince: jest.fn().mockResolvedValue(0),
+    // Workout templates — added by the workout-authoring branch (024).
+    loadAllWorkoutTemplates: jest.fn().mockResolvedValue([]),
+    saveWorkoutTemplate: jest.fn().mockResolvedValue(true),
+    deleteWorkoutTemplate: jest.fn().mockResolvedValue(true),
     __testResetDisabled: () => {
       disabledReason = null;
     },

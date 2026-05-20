@@ -72,3 +72,11 @@ export {
   saveStoredThemeId,
   saveStoredWeightUnit,
 } from './themeRepository';
+
+export {
+  __wipeWorkoutTemplatesForTests,
+  deleteWorkoutTemplate,
+  loadAllWorkoutTemplates,
+  saveWorkoutTemplate,
+  type PersistedWorkoutTemplate,
+} from './workoutTemplateRepository';

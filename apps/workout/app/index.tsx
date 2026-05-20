@@ -2,10 +2,10 @@
  * Root route — phase-dispatching shell.
  *
  * The game store owns the current phase ('home' | 'battle' | 'rest'
- * | 'reward' | 'settings'). This component reads the phase and
- * renders the corresponding screen from `src/screens/`. Keeping all
- * of MVP on one route avoids deep-link rewiring before the flow is
- * stable.
+ * | 'reward' | 'settings' | 'workouts'). This component reads the
+ * phase and renders the corresponding screen from `src/screens/`.
+ * Keeping all of MVP on one route avoids deep-link rewiring before
+ * the flow is stable.
  */
 
 import React from 'react';
@@ -15,6 +15,7 @@ import { HomeScreen } from '../src/screens/HomeScreen';
 import { RestScreen } from '../src/screens/RestScreen';
 import { RewardScreen } from '../src/screens/RewardScreen';
 import { SettingsScreen } from '../src/screens/SettingsScreen';
+import { WorkoutLibraryScreen } from '../src/screens/WorkoutLibraryScreen';
 import { useWorkoutGameStore } from '../src/state/workoutGameStore';
 
 export default function Index(): JSX.Element {
@@ -31,5 +32,7 @@ export default function Index(): JSX.Element {
       return <RewardScreen />;
     case 'settings':
       return <SettingsScreen />;
+    case 'workouts':
+      return <WorkoutLibraryScreen />;
   }
 }
