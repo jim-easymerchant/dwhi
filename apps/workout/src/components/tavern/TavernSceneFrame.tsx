@@ -1,57 +1,91 @@
 /**
- * TavernSceneFrame — full-bleed home-screen centerpiece.
+ * TavernSceneFrame — true full-bleed home-screen header.
  *
- * Wraps the existing `CampScene` in a horizontally full-bleed
- * panel. The panel reaches edge-to-edge so the room reads as the
- * *backdrop*, not a small card; the scene itself is centred
- * inside the panel and clipped by the dark background.
+ * Branch 023 redesign:
  *
- * Two overlays sit on top of the scene:
+ *   - Edge-to-edge width via a viewport-pinned width from
+ *     `Dimensions.get('window')`. The panel ignores the parent
+ *     ScrollView's horizontal padding and reaches all the way
+ *     across the screen.
+ *   - No card chrome — no border, no rounded corners, no surface
+ *     background. The scene IS the chrome.
+ *   - Two small overlays in opposite corners:
+ *       • Upper-left: an environmental theme sign (Iron Quest
+ *         only — Momentum opts out). Small / translucent / does
+ *         NOT obscure the scene.
+ *       • Upper-right: the settings gear (small / translucent).
+ *   - A subtle bottom vignette: a thin layered gradient-style
+ *     overlay that fades the scene into the app background, so
+ *     the scene visually continues *behind* the content scrolling
+ *     below.
  *
- *   1. An optional theme **sign** (rendered top-centre when the
- *      theme provides one — Iron Quest Classic ships
- *      "THE WOUNDED GOBLIN"; Momentum opts out so the Hollow
- *      stays unannounced).
- *   2. A small **gear button** (top-right) that opens Settings.
+ * The CampScene itself is unchanged — same View-based pixel
+ * renderer, same mood-keyed lighting. Only the framing around it
+ * is new.
  *
- * Below the scene, an italicised one-line flavour string is
- * rendered (theme + world-state phrasing).
+ * Pure presentational; no new dependencies.
  *
- * Pure presentational; the scene itself is unchanged — same
- * View-based pixel renderer, same mood-keyed lighting.
- *
- * See: docs/workout-rpg/021-expo-go-setup.md (visual notes)
- *      docs/workout-rpg/019-tavern-home-layout.md §3 (origin)
+ * See: docs/workout-rpg/023-ui-polish-hp-and-timers.md §1, §2
  */
 
 import React from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import {
+  Dimensions,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 
 import type { MomentumTier } from '@dwhi/workout-domain';
 
 import { CampScene } from '../../render';
 import {
   workoutColors,
-  workoutRadii,
   workoutSpacing,
   workoutType,
 } from '../../theme/workoutColors';
+
+// ---------------------------------------------------------------------------
+// Viewport math — the scene reaches edge-to-edge.
+//
+// We pull the device width via `Dimensions.get('window')`. The
+// scene canvas itself is fixed-size (96 × 56 logical pixels at
+// pixelSize=3 → ~288px wide), so the wrapper is wider than the
+// canvas; the canvas centres inside it. The dark wall colour
+// behind the canvas matches the scene's wall tone, so the bleed
+// reads as "the wall continues."
+// ---------------------------------------------------------------------------
+
+const VIEWPORT_WIDTH = Dimensions.get('window').width;
+
+// Reserved height for the header; the scene + overlays sit inside.
+// ~32% of a 700px viewport ≈ 224px — within the brief's 28-35%
+// dominant-header target. The canvas itself is ~168px tall, so
+// the wrapper has a touch of vertical breathing room for the
+// vignette and overlays.
+const HEADER_HEIGHT = 220;
+
+// ---------------------------------------------------------------------------
+// Component
+// ---------------------------------------------------------------------------
 
 export interface TavernSceneFrameProps {
   tier: MomentumTier;
   /** Optional theme tint overlay forwarded to CampScene. */
   overlayColor?: string;
-  /** Optional theme sign rendered top-centre (Iron Quest only). */
+  /** Optional theme sign (top-left). Iron Quest opts in; Momentum
+   *  passes `undefined` to stay unannounced. */
   signText?: string;
-  /** Optional sign subtitle line under the sign. */
+  /** Optional sign subtitle. */
   signSubtitle?: string;
-  /** Optional accent colour used by the sign border + glyph. */
+  /** Optional sign accent colour. */
   signColor?: string;
-  /** Tap target for the gear button (top-right). */
+  /** Tap target for the gear (top-right). */
   onOpenSettings?: () => void;
-  /** One-line scene flavour shown below the scene. */
+  /** Optional one-line scene flavour shown beneath the scene. */
   flavorLine?: string;
-  /** When true, suppress the scene's breathing animation (tests). */
+  /** Pause the breathing animation (tests). */
   paused?: boolean;
   testID?: string;
 }
@@ -69,14 +103,20 @@ export function TavernSceneFrame({
 }: TavernSceneFrameProps): JSX.Element {
   return (
     <View testID={testID} style={styles.frame}>
-      <View style={styles.sceneWrap}>
-        <CampScene
-          tier={tier}
-          overlayColor={overlayColor}
-          paused={paused}
-          testID="home-camp-scene"
-        />
+      <View style={styles.canvas}>
+        {/* The scene itself — centred horizontally inside the
+            full-bleed wrapper. */}
+        <View style={styles.sceneCenter}>
+          <CampScene
+            tier={tier}
+            overlayColor={overlayColor}
+            paused={paused}
+            testID="home-camp-scene"
+          />
+        </View>
 
+        {/* Top-left environmental sign — small, translucent, does
+            NOT dominate. Iron Quest only. */}
         {signText ? (
           <View
             testID="tavern-sign"
@@ -108,6 +148,7 @@ export function TavernSceneFrame({
           </View>
         ) : null}
 
+        {/* Top-right gear button — small, translucent. */}
         {onOpenSettings ? (
           <Pressable
             accessibilityRole="button"
@@ -122,6 +163,16 @@ export function TavernSceneFrame({
             <Text style={styles.gearGlyph}>⚙</Text>
           </Pressable>
         ) : null}
+
+        {/* Bottom vignette — three thin opacity bands fade the
+            scene into the app background. View-only, no Skia. */}
+        <View pointerEvents="none" style={styles.vignetteBand1} />
+        <View pointerEvents="none" style={styles.vignetteBand2} />
+        <View
+          pointerEvents="none"
+          testID="tavern-vignette"
+          style={styles.vignetteBand3}
+        />
       </View>
 
       {flavorLine ? (
@@ -133,62 +184,109 @@ export function TavernSceneFrame({
   );
 }
 
+// ---------------------------------------------------------------------------
+// Styles
+// ---------------------------------------------------------------------------
+
 const styles = StyleSheet.create({
   frame: {
-    // Full-bleed horizontally — the parent ScrollView's padding is
-    // negated by the negative horizontal margin, so the panel
-    // reaches edge-to-edge without removing the safe-area inset.
+    // Cancel the parent ScrollView's horizontal padding so the
+    // scene reaches the screen edges. The wrapper itself is
+    // pinned to viewport width.
     marginHorizontal: -workoutSpacing.lg,
-    paddingVertical: workoutSpacing.md,
-    paddingHorizontal: workoutSpacing.lg,
+    width: VIEWPORT_WIDTH,
+    alignItems: 'stretch',
     gap: workoutSpacing.sm,
-    alignItems: 'center',
-    // No border, no rounded card — the scene IS the chrome.
   },
-  sceneWrap: {
-    alignItems: 'center',
+  canvas: {
+    width: VIEWPORT_WIDTH,
+    height: HEADER_HEIGHT,
+    // Match the scene's back wall so the bleed reads continuous.
+    backgroundColor: '#181018',
+    overflow: 'hidden',
     position: 'relative',
   },
+  sceneCenter: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  // Small, translucent corner sign. ~140 wide vs the previous
+  // centred sign that spanned up to 92% of the scene width — a
+  // ~40% reduction. Anchored top-left with breathing room.
   signWrap: {
     position: 'absolute',
     top: workoutSpacing.sm,
-    alignSelf: 'center',
-    paddingHorizontal: workoutSpacing.md,
-    paddingVertical: 4,
-    backgroundColor: 'rgba(8, 8, 12, 0.78)',
+    left: workoutSpacing.sm,
+    paddingHorizontal: workoutSpacing.sm,
+    paddingVertical: 3,
+    backgroundColor: 'rgba(8, 8, 12, 0.55)',
     borderWidth: 1,
     borderColor: workoutColors.ember,
-    borderRadius: workoutRadii.sm,
-    alignItems: 'center',
-    maxWidth: '92%',
+    borderRadius: 4,
+    maxWidth: 160,
+    opacity: 0.92,
   },
   signTitle: {
-    ...workoutType.label,
+    ...workoutType.caption,
     color: workoutColors.ember,
-    letterSpacing: 3,
+    letterSpacing: 2,
     fontWeight: '700',
+    fontSize: 11,
   },
   signSubtitle: {
     ...workoutType.caption,
     color: workoutColors.textSecondary,
     fontStyle: 'italic',
+    fontSize: 9,
   },
   gear: {
     position: 'absolute',
     top: workoutSpacing.sm,
     right: workoutSpacing.sm,
-    width: 36,
-    height: 36,
-    borderRadius: workoutRadii.pill,
-    backgroundColor: 'rgba(8, 8, 12, 0.65)',
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(8, 8, 12, 0.55)',
     borderWidth: 1,
     borderColor: workoutColors.border,
     alignItems: 'center',
     justifyContent: 'center',
   },
   gearGlyph: {
-    fontSize: 18,
+    fontSize: 16,
     color: workoutColors.textSecondary,
+  },
+  // Three thin overlay bands at the bottom approximate a soft
+  // vignette without Skia / SVG. Each band uses the app's
+  // background colour at increasing opacity — the scene visually
+  // fades into the page below.
+  vignetteBand1: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 24,
+    height: 20,
+    backgroundColor: workoutColors.background,
+    opacity: 0.18,
+  },
+  vignetteBand2: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 8,
+    height: 18,
+    backgroundColor: workoutColors.background,
+    opacity: 0.36,
+  },
+  vignetteBand3: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: 10,
+    backgroundColor: workoutColors.background,
+    opacity: 0.7,
   },
   flavor: {
     ...workoutType.caption,

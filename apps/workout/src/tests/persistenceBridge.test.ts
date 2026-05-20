@@ -30,6 +30,9 @@ jest.mock('../persistence', () => {
   const loadStoredWeightUnit = jest.fn().mockResolvedValue(null);
   const saveStoredWeightUnit = jest.fn().mockResolvedValue(true);
   const loadTotalQuestXp = jest.fn().mockResolvedValue(0);
+  // Recent-session count — added by the ui-polish branch (023).
+  // Default: zero sessions in the recent window.
+  const loadSessionCountSince = jest.fn().mockResolvedValue(0);
   return {
     saveSetMemory,
     loadAllSetMemory,
@@ -48,6 +51,7 @@ jest.mock('../persistence', () => {
     loadStoredWeightUnit,
     saveStoredWeightUnit,
     loadTotalQuestXp,
+    loadSessionCountSince,
   };
 });
 

@@ -36,10 +36,13 @@ import { MonsterSprite } from '../render';
 import { getTheme } from '../theme';
 import {
   displayWeight,
-  draftToCanonicalKg,
   formatWeight,
   stepSizeKg,
 } from '../units';
+import { computePlayerHp } from '../combat';
+import { levelForCumulativeXp } from '../leveling';
+import { RestTimer } from '../components/battle/RestTimer';
+import { useRestTimer } from '../hooks/useRestTimer';
 
 export function BattleScreen(): JSX.Element {
   const phase = useWorkoutGameStore((s) => s.phase);
@@ -66,6 +69,22 @@ export function BattleScreen(): JSX.Element {
   const victoryAvailable = useWorkoutGameStore((s) => s.victoryAvailable);
   const enemyPhaseIndex = useWorkoutGameStore((s) => s.enemyPhaseIndex);
   const weightUnit = useWorkoutGameStore((s) => s.weightUnit);
+  const cumulativeXp = useWorkoutGameStore((s) => s.cumulativeXp);
+  const recentSessionsCount = useWorkoutGameStore((s) => s.recentSessionsCount);
+  const priorMomentum = useWorkoutGameStore((s) => s.priorMomentum);
+
+  // Player HP — pure derived; readiness / capacity, not body mass.
+  // Pure function from level + recent-sessions + momentum.
+  const playerLevel = levelForCumulativeXp(cumulativeXp);
+  const playerHp = computePlayerHp({
+    level: playerLevel,
+    recentSessions: recentSessionsCount,
+    momentum: priorMomentum,
+  });
+
+  // Optional, never-blocking rest timer. The hook owns local
+  // state; the parent only decides when to OFFER the chips.
+  const restTimer = useRestTimer();
 
   if (phase === 'rest') {
     return <RestScreen />;
@@ -159,6 +178,41 @@ export function BattleScreen(): JSX.Element {
               Another fragment formed in the quiet.
             </Text>
           )}
+        </View>
+
+        {/* Player HP — readiness / capacity / recovery.
+            Visually mirrors the enemy HP block; ember-tinted for
+            the player vs danger-tinted for the enemy. */}
+        <View
+          testID="battle-player-hp-block"
+          style={styles.playerHpBlock}
+          accessibilityRole="progressbar"
+          accessibilityLabel={`Player readiness ${playerHp.total} HP`}
+        >
+          <View style={styles.hpHeaderRow}>
+            <Text style={styles.hpHeaderLabel}>YOU</Text>
+            <Text testID="battle-player-hp-level" style={styles.playerLevelTag}>
+              LVL {playerLevel}
+            </Text>
+          </View>
+          <View style={styles.hpBarTrack} testID="battle-player-hp-track">
+            <View
+              testID="battle-player-hp-fill"
+              style={[
+                styles.hpBarFill,
+                {
+                  // Player bar is always full at the start of a battle —
+                  // no in-session decay (anti-punishment). It scales
+                  // with cumulative readiness instead.
+                  width: '100%',
+                  backgroundColor: theme.uiAccent.primary,
+                },
+              ]}
+            />
+          </View>
+          <Text testID="battle-player-hp-text" style={styles.hpText}>
+            {playerHp.total} HP  ·  ready
+          </Text>
         </View>
 
         {/* Victory CTAs */}
@@ -266,6 +320,19 @@ export function BattleScreen(): JSX.Element {
             </Pressable>
           </View>
         )}
+
+        {/* Optional rest timer — supportive, never-blocking.
+            Offers 60/90/120-second presets after at least one
+            set has been logged. The hook owns the countdown
+            state; tapping a chip starts it; the player can
+            continue working through the encounter while it
+            ticks, or dismiss it at any time. */}
+        <RestTimer
+          testID="battle-rest-timer"
+          timer={restTimer}
+          offerWhenIdle={log.length > 0 && !victoryAvailable}
+          accentColor={theme.uiAccent.primary}
+        />
 
         {/* Variant chooser */}
         <View style={styles.chooserBlock}>
@@ -402,6 +469,25 @@ const styles = StyleSheet.create({
     color: workoutColors.textMuted,
   },
   hpPhaseTag: {
+    ...workoutType.caption,
+    letterSpacing: 2,
+    color: workoutColors.ember,
+  },
+  playerHpBlock: {
+    width: '100%',
+    marginTop: workoutSpacing.sm,
+    paddingHorizontal: workoutSpacing.md,
+    paddingVertical: workoutSpacing.sm,
+    backgroundColor: workoutColors.surface,
+    borderRadius: workoutRadii.md,
+    borderWidth: 1,
+    // Subtle ember edge — visually distinct from the enemy HP
+    // block's neutral border. Reinforces the "YOU vs resistance"
+    // framing without competing for attention.
+    borderColor: workoutColors.emberDim,
+    gap: workoutSpacing.xs,
+  },
+  playerLevelTag: {
     ...workoutType.caption,
     letterSpacing: 2,
     color: workoutColors.ember,

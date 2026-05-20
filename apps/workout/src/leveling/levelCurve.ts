@@ -16,41 +16,46 @@
  *   completes work. Momentum stays where it belongs: the Ember
  *   bar at the footer.
  *
- * Curve choice:
+ * Curve choice (rebalanced in branch 023 after device feedback that
+ * "L5 after one gym visit is excessive"):
  *
- *   `xpForLevel(N) = floor(30 * (N - 1) ^ 1.4)`
+ *   `xpForLevel(N) = floor(100 * (N - 1) ^ 1.7)`
  *
- *   Anchors:
- *     - L2 ≈ 30 XP   → first short quest (~40-60 XP) lifts the
- *                       new player to L2 immediately.
- *     - L3 ≈ 79 XP
- *     - L5 ≈ 199 XP
- *     - L10 ≈ 588 XP → "multiple sessions"
- *     - L20 ≈ 1,564 XP
- *     - L30 ≈ 2,765 XP → "sustained history" (~30+ quests)
- *     - L50 ≈ 6,608 XP
+ *   Anchors (assuming a typical workout earns ~150-250 XP):
+ *     - L2  ≈     100 XP → reachable by the first workout, never
+ *                          jumped past (a beefy 200 XP workout
+ *                          still only lands at L2, not L3).
+ *     - L3  ≈     324 XP → reachable after the first week's
+ *                          consistency (~3 sessions).
+ *     - L4  ≈     647 XP
+ *     - L5  ≈   1,055 XP
+ *     - L8  ≈   2,733 XP → "first month" target (~12 sessions).
+ *     - L10 ≈   4,189 XP
+ *     - L15 ≈   8,880 XP → "3 months consistent" target.
+ *     - L20 ≈  14,923 XP
+ *     - L30 ≈  30,625 XP → "1 year of consistency" target.
+ *     - L50 ≈  74,702 XP
  *
  *   The curve is monotonically increasing, deterministic, and
- *   has no hard cap (high-level play eventually shows L60+).
+ *   has no hard cap. No decay, no punishment systems — LEVEL is
+ *   long-term identity, not short-term emotional state (that's
+ *   what Momentum/Ember does).
  *
  * Pure. No I/O. No state. Same input → same output.
  *
  * See:
- *   docs/workout-rpg/020-world-state-and-patrons.md
- *   the user-facing rebalance brief: "1 short workout should not
- *     jump more than 1-2 levels; level 10 should require
- *     multiple sessions; level 30 should represent sustained
- *     history, not 3 battles."
+ *   docs/workout-rpg/023-ui-polish-hp-and-timers.md (rebalance)
+ *   docs/workout-rpg/020-world-state-and-patrons.md (prior round)
  */
 
 /** Lowest level value the curve can return. */
 export const MIN_LEVEL = 1;
 
 /** Curve base — the multiplier in front of `(N-1) ^ EXPONENT`. */
-export const LEVEL_CURVE_BASE = 30;
+export const LEVEL_CURVE_BASE = 100;
 
 /** Curve exponent — controls how fast XP requirements grow. */
-export const LEVEL_CURVE_EXPONENT = 1.4;
+export const LEVEL_CURVE_EXPONENT = 1.7;
 
 /**
  * Cumulative XP threshold for `level`. Pure.

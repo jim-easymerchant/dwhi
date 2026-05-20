@@ -170,6 +170,20 @@ emotional texture of the long game. They do not expand MVP scope.
     per-household), and the explicit non-goals (no Supabase,
     no auth, no sync) for the foundation branch. Recommends
     next branch: `claude/workout-rpg-household-foundation-…`.
+23. [`023-ui-polish-hp-and-timers.md`](./023-ui-polish-hp-and-timers.md)
+    — sixth-pass polish from device feedback: true full-bleed
+    tavern header (Dimensions-pinned width, vignette fade, no
+    card chrome), small upper-left Iron Quest sign (~40%
+    smaller, translucent), level-curve rebalance round 2 —
+    `xpForLevel(N) = floor(100 * (N-1) ^ 1.7)` so one workout
+    caps at L2 and L30 takes a year of consistency. Renamed
+    coach section to "THE REGULARS" / "Voices around the fire"
+    to remove the duplicate "TONIGHT'S PATRONS" header. New
+    `apps/workout/src/combat/playerHp.ts` — pure readiness /
+    capacity formula (NOT body-mass-derived) feeding a
+    dedicated player HP bar on the battle screen. Optional
+    `useRestTimer` hook + `RestTimer` component — pure reducer
+    state machine, never-blocking, supportive copy only.
 
 ### Branch — Product parity pass
 
