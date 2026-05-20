@@ -128,6 +128,31 @@ export async function listRecentQuests(limit = 20): Promise<QuestHistoryRecord[]
 }
 
 /**
+ * Count completed quests since the given ISO timestamp. Used by
+ * the player-HP system to read "how many sessions in the recent
+ * window?" — typically the last 14 days.
+ *
+ * Returns 0 on missing table, no rows, or any error.
+ */
+export async function loadSessionCountSince(sinceIso: string): Promise<number> {
+  try {
+    const db = await getDb();
+    const row = await db.getFirstAsync<{ count: number | null }>(
+      `SELECT COUNT(*) AS count
+         FROM workout_quest_history
+        WHERE completed_at_iso >= ?;`,
+      [sinceIso],
+    );
+    const count = row?.count ?? 0;
+    return Number.isFinite(count) && count > 0 ? count : 0;
+  } catch (e) {
+    // eslint-disable-next-line no-console
+    console.warn('[workout.persistence] loadSessionCountSince failed:', e);
+    return 0;
+  }
+}
+
+/**
  * Sum every recorded quest's xp into a single total. Used by the
  * hydration path to seed the displayed level from the player's
  * actual quest history.

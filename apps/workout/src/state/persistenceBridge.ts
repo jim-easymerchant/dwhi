@@ -28,6 +28,7 @@ import {
   isPersistenceDisabled,
   loadAllSetMemory,
   loadPlayerMomentum,
+  loadSessionCountSince,
   loadStoredThemeId,
   loadStoredWeightUnit,
   loadTotalQuestXp,
@@ -101,6 +102,11 @@ export async function hydratePersistence(): Promise<HydrationResult> {
 
   try {
     await initDatabase();
+    const RECENT_WINDOW_DAYS = 14;
+    const recentWindowIso = new Date(
+      Date.now() - RECENT_WINDOW_DAYS * 24 * 60 * 60 * 1000,
+    ).toISOString();
+
     const [
       memoryMap,
       momentum,
@@ -108,6 +114,7 @@ export async function hydratePersistence(): Promise<HydrationResult> {
       storedThemeId,
       storedWeightUnit,
       totalQuestXp,
+      recentSessionsCount,
     ] = await Promise.all([
       loadAllSetMemory().catch((e) => {
         // eslint-disable-next-line no-console
@@ -139,6 +146,11 @@ export async function hydratePersistence(): Promise<HydrationResult> {
         console.warn('[workout.persistence] loadTotalQuestXp failed:', e);
         return 0;
       }),
+      loadSessionCountSince(recentWindowIso).catch((e) => {
+        // eslint-disable-next-line no-console
+        console.warn('[workout.persistence] loadSessionCountSince failed:', e);
+        return 0;
+      }),
     ]);
 
     const setMemory: SetMemory = {};
@@ -159,6 +171,7 @@ export async function hydratePersistence(): Promise<HydrationResult> {
       selectedThemeId: safeThemeId(storedThemeId),
       weightUnit: safeWeightUnit(storedWeightUnit),
       cumulativeXp: Math.max(0, totalQuestXp ?? 0),
+      recentSessionsCount: Math.max(0, recentSessionsCount ?? 0),
       persistenceReady: true,
       persistenceDisabled: false,
       persistenceError: null,

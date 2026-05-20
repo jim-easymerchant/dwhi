@@ -119,7 +119,7 @@ export const momentumTheme: ThemePack = {
   },
 
   worldState: {
-    patronSectionLabel: 'Tonight at the hearth',
+    patronSectionLabel: 'Voices around the fire',
     ambientDensity: 'sparse',
     tavernEnergyBias: -0.35,
     weatherCopy: {

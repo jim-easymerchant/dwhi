@@ -106,7 +106,10 @@ export function HomeScreen(): JSX.Element {
   );
 
   return (
-    <SafeAreaView style={styles.safe}>
+    // edges="bottom" so the SafeAreaView does NOT inset the top —
+    // the tavern scene reaches behind the status bar for a true
+    // edge-to-edge dominant header.
+    <SafeAreaView edges={['bottom']} style={styles.safe}>
       <ScrollView contentContainerStyle={styles.scroll}>
         <TavernSceneFrame
           testID="home-scene-frame"
@@ -220,7 +223,12 @@ export function HomeScreen(): JSX.Element {
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: workoutColors.background },
   scroll: {
-    padding: workoutSpacing.lg,
+    // No top padding — the tavern scene reaches the top of the
+    // screen for the dominant header feel. Horizontal padding
+    // is what the scene's negative margin cancels.
+    paddingTop: 0,
+    paddingHorizontal: workoutSpacing.lg,
+    paddingBottom: workoutSpacing.lg,
     gap: workoutSpacing.md,
     flexGrow: 1,
   },

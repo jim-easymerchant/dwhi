@@ -232,6 +232,10 @@ export interface WorkoutGameState {
    *  momentum so the LEVEL grows with *history*, not with the
    *  Ember warming up. */
   cumulativeXp: number;
+  /** Number of completed quests within the recent window
+   *  (default 14 days). Feeds the player-HP "readiness" math —
+   *  rewards consistency without punishing absence. */
+  recentSessionsCount: number;
 
   // --- modality + variant ---
   modality: Variant;
@@ -415,6 +419,12 @@ export const useWorkoutGameStore = create<WorkoutGameState>((set, get) => ({
   // Cumulative XP — seeded by hydration from SUM(quest_history.xp).
   // Memory-only mode starts at 0 and grows with each finishQuest.
   cumulativeXp: 0,
+
+  // Recent-session count (last 14 days). Hydration seeds from
+  // COUNT(*) WHERE completed_at_iso >= now-14d. Memory-only mode
+  // starts at 0 and grows with each finishQuest in the running
+  // session.
+  recentSessionsCount: 0,
 
   modality: 'bodyweight',
   currentVariantId: INITIAL_VARIANT.id,
@@ -700,6 +710,10 @@ export const useWorkoutGameStore = create<WorkoutGameState>((set, get) => ({
       // appends a row to workout_quest_history; hydration on a
       // fresh launch re-seeds this same value from SUM(xp).
       cumulativeXp: s.cumulativeXp + Math.max(0, result.questXp.xp),
+      // Bump the in-session recent-quest count. The bridge later
+      // re-seeds this from `COUNT(*) WHERE completed_at_iso >= now-14d`
+      // on the next hydrate so the window always trails the wall clock.
+      recentSessionsCount: s.recentSessionsCount + 1,
     }));
 
     // Fire-and-forget — saves momentum + appends history.

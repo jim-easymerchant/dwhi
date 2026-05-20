@@ -49,6 +49,7 @@ export {
   appendQuestHistory,
   getMostRecentCompletedAtIso,
   listRecentQuests,
+  loadSessionCountSince,
   loadTotalQuestXp,
   type QuestHistoryRecord,
 } from './questHistoryRepository';

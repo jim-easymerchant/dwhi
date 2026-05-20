@@ -31,6 +31,8 @@ jest.mock('../persistence', () => {
     loadStoredWeightUnit: jest.fn().mockResolvedValue(null),
     saveStoredWeightUnit: jest.fn().mockResolvedValue(true),
     loadTotalQuestXp: jest.fn().mockResolvedValue(0),
+    // Recent-session count — added by the ui-polish branch (023).
+    loadSessionCountSince: jest.fn().mockResolvedValue(0),
     __testResetDisabled: () => {
       disabledReason = null;
     },

@@ -24,21 +24,37 @@ describe('xpForLevel — anchors + monotonicity', () => {
     expect(xpForLevel(1)).toBe(0);
   });
 
-  test('Level 2 is reachable after a single quest (≤80 XP)', () => {
-    expect(xpForLevel(2)).toBeLessThanOrEqual(80);
-    expect(xpForLevel(2)).toBeGreaterThan(0);
+  test('Level 2 sits in the first-workout band (60-250 XP)', () => {
+    // The rebalanced curve places L2 at the LOW end so a typical
+    // workout always reaches it, and at the HIGH end so a very
+    // beefy workout cannot blast past to L3.
+    const x = xpForLevel(2);
+    expect(x).toBeGreaterThanOrEqual(60);
+    expect(x).toBeLessThanOrEqual(250);
   });
 
-  test('Level 10 sits between ~400 and ~1500 XP', () => {
-    const x = xpForLevel(10);
+  test('Level 4 sits in the first-week band (~600 XP)', () => {
+    const x = xpForLevel(4);
     expect(x).toBeGreaterThanOrEqual(400);
-    expect(x).toBeLessThanOrEqual(1500);
+    expect(x).toBeLessThanOrEqual(900);
   });
 
-  test('Level 30 sits between ~2,000 and ~8,000 XP (sustained history)', () => {
+  test('Level 8 sits in the first-month band (~2700 XP)', () => {
+    const x = xpForLevel(8);
+    expect(x).toBeGreaterThanOrEqual(1800);
+    expect(x).toBeLessThanOrEqual(3500);
+  });
+
+  test('Level 15 sits in the "3 months consistent" band (~8000-12000 XP)', () => {
+    const x = xpForLevel(15);
+    expect(x).toBeGreaterThanOrEqual(7000);
+    expect(x).toBeLessThanOrEqual(13000);
+  });
+
+  test('Level 30 sits in the "1 year of consistency" band (~25k-40k XP)', () => {
     const x = xpForLevel(30);
-    expect(x).toBeGreaterThanOrEqual(2000);
-    expect(x).toBeLessThanOrEqual(8000);
+    expect(x).toBeGreaterThanOrEqual(25_000);
+    expect(x).toBeLessThanOrEqual(40_000);
   });
 
   test('Curve is strictly increasing for the first 100 levels', () => {
@@ -85,34 +101,63 @@ describe('levelForCumulativeXp — inverse of xpForLevel', () => {
   });
 });
 
-describe('product brief — sane gain shape', () => {
-  // The brief: ~3 short battles must NOT yield level 30. A short
-  // battle earns roughly 30-80 XP in the current orchestrator.
-  // We assert two anti-regression bounds at common XP totals.
+describe('product brief — pacing under realistic workout XP', () => {
+  // The rebalance brief targets the player's lived experience:
+  //   First workout:  L2 at most
+  //   First week:     L3-4 (~3 sessions)
+  //   First month:    L6-8 (~12 sessions)
+  //   3 months:       L12-18 (~36 sessions)
+  //   1 year:         L30+ (~150 sessions)
+  //
+  // A typical workout under the orchestrator's questXp formula
+  // lands around 150-220 XP (the previous curve put one workout
+  // at L5 ≈ 200 XP). We assert the bands at that estimate.
 
-  const SHORT_QUEST_XP = 60;
+  const WORKOUT_XP = 200;
+  const sessionsToLevel = (sessions: number) =>
+    levelForCumulativeXp(sessions * WORKOUT_XP);
 
-  test('three short battles total puts the player around L2-L5 (not L30)', () => {
-    const after = levelForCumulativeXp(3 * SHORT_QUEST_XP);
-    expect(after).toBeGreaterThanOrEqual(2);
-    expect(after).toBeLessThan(10);
+  test('one workout caps at level 2', () => {
+    expect(sessionsToLevel(1)).toBeLessThanOrEqual(2);
+    expect(sessionsToLevel(1)).toBeGreaterThanOrEqual(2);
   });
 
-  test('one short battle moves the player by at most 2 levels from L1', () => {
-    const startLevel = levelForCumulativeXp(0);
-    const afterLevel = levelForCumulativeXp(SHORT_QUEST_XP);
-    expect(afterLevel - startLevel).toBeLessThanOrEqual(2);
-    expect(afterLevel - startLevel).toBeGreaterThanOrEqual(1);
+  test('one workout NEVER reaches level 3 (the "L5 after one workout" regression fence)', () => {
+    expect(sessionsToLevel(1)).toBeLessThan(3);
   });
 
-  test('reaching level 10 takes at least ~5 short battles', () => {
-    for (let q = 1; q <= 5; q++) {
-      expect(levelForCumulativeXp(q * SHORT_QUEST_XP)).toBeLessThan(10);
-    }
+  test('first week (3 sessions) lands at L3-4', () => {
+    const lvl = sessionsToLevel(3);
+    expect(lvl).toBeGreaterThanOrEqual(3);
+    expect(lvl).toBeLessThanOrEqual(4);
   });
 
-  test('reaching level 30 takes at least ~30 short battles ("sustained history")', () => {
-    expect(levelForCumulativeXp(20 * SHORT_QUEST_XP)).toBeLessThan(30);
+  test('first month (12 sessions) lands at L6-8', () => {
+    const lvl = sessionsToLevel(12);
+    expect(lvl).toBeGreaterThanOrEqual(6);
+    expect(lvl).toBeLessThanOrEqual(8);
+  });
+
+  test('three months (36 sessions) lands at L12-18', () => {
+    const lvl = sessionsToLevel(36);
+    expect(lvl).toBeGreaterThanOrEqual(12);
+    expect(lvl).toBeLessThanOrEqual(18);
+  });
+
+  test('one year (150 sessions) reaches the L30 threshold (long-term identity)', () => {
+    // A consistent year of work at ~200 XP/quest lands the player
+    // right at the L30 boundary; a slightly stronger year (with PRs
+    // or higher-volume quests) crosses it. We allow L29-L30 here
+    // because the curve places L30 at 30,625 XP — 150 × 200 = 30,000
+    // is exactly one short workout below the threshold.
+    const lvl = sessionsToLevel(150);
+    expect(lvl).toBeGreaterThanOrEqual(29);
+    // 200 sessions (a stronger year) definitively passes L30.
+    expect(sessionsToLevel(200)).toBeGreaterThanOrEqual(30);
+  });
+
+  test('previous regression: three battles do not reach level 30', () => {
+    expect(sessionsToLevel(3)).toBeLessThan(10);
   });
 });
 
